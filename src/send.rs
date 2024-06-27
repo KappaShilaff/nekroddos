@@ -6,17 +6,16 @@ use ton_abi::sign_with_signature_id;
 use ton_block::{GetRepresentationHash, MsgAddressInt};
 use ton_types::{BuilderData, IBitstring, SliceData};
 
-async fn send(
+pub async fn send(
     client: &everscale_rpc_client::RpcClient,
     signer: &Keypair,
-    nonce: u64,
+    from: MsgAddressInt,
     payload: BuilderData,
     destination: MsgAddressInt,
     amount: u64,
     sign_id: Option<i32>,
 ) -> anyhow::Result<()> {
-    let address = compute_contract_address(&signer.public, 0, nonce);
-    let state = client.get_contract_state(&address, None).await?.unwrap();
+    let state = client.get_contract_state(&from, None).await?.unwrap();
     let gift = nekoton::core::ton_wallet::Gift {
         flags: 3,
         bounce: false,
@@ -32,7 +31,7 @@ async fn send(
         &SimpleClock,
         &signer.public,
         &state.account,
-        address,
+        from.clone(),
         vec![gift],
         Expiration::Timestamp(now),
     )?;

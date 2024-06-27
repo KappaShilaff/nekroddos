@@ -1,5 +1,6 @@
 use ed25519_dalek::Keypair;
 use nekoton_abi::{PackAbi, PackAbiPlain, UnpackAbiPlain};
+use nekoton_utils::serde_address;
 use serde::{Deserialize, Serialize};
 use ton_block::MsgAddressInt;
 use ton_types::{BuilderData, Cell};
@@ -117,16 +118,32 @@ pub struct RouteMeta {
 pub struct SendData {
     pub payload_meta: PayloadMeta,
     pub signer: Keypair,
+    pub sender_addr: MsgAddressInt,
+}
+
+impl SendData {
+    pub fn new(payload_meta: PayloadMeta, signer: Keypair, sender_addr: MsgAddressInt) -> Self {
+        Self {
+            payload_meta,
+            signer,
+            sender_addr,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CreateAccountParams {
     pub nonce: u64,
 }
 
 #[derive(Serialize, Deserialize)]
-struct CreateAccountParams {
-    pub nonce: i64,
-}
-
-#[derive(Serialize, Deserialize)]
-struct Root {
+pub struct EverWalletInfo {
     #[serde(rename = "createAccountParams")]
     pub create_account_params: CreateAccountParams,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct GenericDeploymentInfo {
+    #[serde(with = "serde_address")]
+    pub address: MsgAddressInt,
 }
