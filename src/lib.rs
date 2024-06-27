@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -65,6 +66,12 @@ pub async fn run_test() -> Result<()> {
         }
     }
 
+    println!(
+        "Found {} wallets and {} pools",
+        wallet_nonce.len(),
+        pool_addresses.len()
+    );
+
     let recipients: Vec<_> = wallet_nonce
         .iter()
         .map(|nonce| compute_contract_address(&keypair.public, 0, *nonce))
@@ -79,6 +86,7 @@ pub async fn run_test() -> Result<()> {
         .await
         .load_tokens_and_token_pairs();
 
+    let start = std::time::Instant::now();
     let payloads = recipients
         .into_iter()
         .map(|recipient| {
@@ -91,19 +99,31 @@ pub async fn run_test() -> Result<()> {
         })
         .collect::<Vec<SendData>>();
 
+    println!(
+        "Generated {} payloads in {:?}",
+        payloads.len(),
+        start.elapsed()
+    );
+
     let barrier = Barrier::new(payloads.len() + 1);
     let barrier = Arc::new(barrier);
 
     let num_swaps = args.num_swaps;
     let sleep_duration = Duration::from_millis(args.sleep_ms);
+    let counter = Arc::new(AtomicU64::new(0));
 
     for payload in payloads {
         let client = client.clone();
         let barrier = barrier.clone();
+        let counter = counter.clone();
         tokio::spawn(async move {
-            process_payload(client, payload, barrier, sleep_duration, num_swaps).await
+            process_payload(client, payload, barrier, sleep_duration, num_swaps, counter).await
         });
     }
+    println!("Spawned dudos tasks");
+    tokio::spawn(async move {
+        print_stats(counter).await;
+    });
 
     barrier.wait().await;
     Ok(())
@@ -115,6 +135,7 @@ async fn process_payload(
     barrier: Arc<Barrier>,
     sleep_duration: Duration,
     num_swaps: usize,
+    counter: Arc<AtomicU64>,
 ) {
     for _ in 0..num_swaps {
         if let Err(e) = send_forward_and_backward(&client, &payload).await {
@@ -122,6 +143,7 @@ async fn process_payload(
             continue;
         }
         tokio::time::sleep(sleep_duration).await;
+        counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     barrier.wait().await;
@@ -153,4 +175,13 @@ async fn send_forward_and_backward(client: &RpcClient, payload: &SendData) -> Re
     .await?;
 
     Ok(())
+}
+
+async fn print_stats(counter: Arc<AtomicU64>) {
+    let start = std::time::Instant::now();
+    loop {
+        let count = counter.load(std::sync::atomic::Ordering::Relaxed);
+        println!("Sent {} transactions in {:?}", count, start.elapsed());
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
 }
