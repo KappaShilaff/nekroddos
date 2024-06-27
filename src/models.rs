@@ -87,8 +87,6 @@ pub struct DexPairV9BuildCrossPairExchangePayloadV2 {
     pub success_payload: Option<ton_types::Cell>,
     #[abi(name = "_cancelPayload")]
     pub cancel_payload: Option<ton_types::Cell>,
-    #[abi(name = "_toNative")]
-    pub to_native: Option<bool>,
 }
 
 #[derive(Debug, Clone, PackAbi, nekoton_abi::KnownParamType)]

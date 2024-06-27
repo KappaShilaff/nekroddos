@@ -1,13 +1,13 @@
 use crate::abi::{dex_pair, token_wallet};
 use crate::app_cache::AppCache;
 use crate::models::{
-    DexPairV9BuildCrossPairExchangePayloadV2, DexPairV9Steps, PayloadInput, RouteMeta, PayloadMeta,
+    DexPairV9BuildCrossPairExchangePayloadV2, DexPairV9Steps, PayloadInput, PayloadMeta, RouteMeta,
     StepInput, Transfer,
 };
 use nekoton::utils::{SimpleClock, TrustMe};
 use nekoton_abi::{FunctionExt, PackAbiPlain};
 use ton_abi::TokenValue;
-use ton_block::{MsgAddressInt};
+use ton_block::MsgAddressInt;
 
 pub fn build_double_side_payloads(mut input: PayloadInput, app_cache: &AppCache) -> PayloadMeta {
     let forward_route = build_payload(input.recipient.clone(), input.steps.clone(), app_cache);
@@ -49,7 +49,7 @@ fn build_payload(
         })
         .collect();
 
-    let tokens = DexPairV9BuildCrossPairExchangePayloadV2 {
+    let tokens = dbg!(DexPairV9BuildCrossPairExchangePayloadV2 {
         id: 0,
         deploy_wallet_grams: 0, // todo!
         expected_amount: 0,
@@ -60,9 +60,9 @@ fn build_payload(
         referrer: MsgAddressInt::default(),
         success_payload: None,
         cancel_payload: None,
-        to_native: None,
-    }
+    })
     .pack();
+    log::error!("ADDR: {}", first_pool.pool_address.to_string());
 
     let payload = dex_pair()
         .function("buildCrossPairExchangePayloadV2")

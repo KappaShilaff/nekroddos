@@ -56,13 +56,11 @@ pub async fn run_test() -> Result<()> {
     {
         let filename = file.file_name().to_string_lossy();
         if filename.contains("commonAccount") {
-            let wallet_info: EverWalletInfo =
-                serde_json::from_reader(std::fs::File::open(file.path())?)?;
+            let wallet_info: EverWalletInfo = serde_json::from_slice(&std::fs::read(file.path())?)?;
             wallet_nonce.push(wallet_info.create_account_params.nonce);
         }
         if filename.contains("DexPair") {
-            let info: GenericDeploymentInfo =
-                serde_json::from_reader(std::fs::File::open(file.path())?)?;
+            let info: GenericDeploymentInfo = serde_json::from_slice(&std::fs::read(file.path())?)?;
             pool_addresses.push(info.address);
         }
     }
