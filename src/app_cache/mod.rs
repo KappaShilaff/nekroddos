@@ -1,12 +1,16 @@
-use crate::abi::dex_pair;
-use crate::build_payload::build_double_side_payloads;
-use crate::models::{GetTokenRoots, PayloadInput, PayloadMeta, StepInput};
+use std::collections::{HashMap, HashSet};
+
 use everscale_rpc_client::RpcClient;
+use futures_util::stream::FuturesUnordered;
+use futures_util::StreamExt;
 use nekoton::utils::SimpleClock;
 use nekoton_abi::{FunctionExt, UnpackAbiPlain};
 use rand::prelude::SliceRandom;
-use std::collections::{HashMap, HashSet};
 use ton_block::{AccountStuff, MsgAddressInt};
+
+use crate::abi::dex_pair;
+use crate::build_payload::build_double_side_payloads;
+use crate::models::{GetTokenRoots, PayloadInput, PayloadMeta, StepInput};
 
 fn build_answer_id_camel() -> ton_abi::Token {
     ton_abi::Token::new(
@@ -24,19 +28,30 @@ pub struct AppCache {
 
 impl AppCache {
     pub async fn load_states(mut self, tx: &RpcClient, pool_addresses: Vec<MsgAddressInt>) -> Self {
-        let mut res = HashMap::new();
-        for address in pool_addresses {
-            if let Ok(Some(account)) = tx.get_contract_state(&address, None).await {
-                res.insert(address, account.account);
-            }
-        }
+        let start = std::time::Instant::now();
+        let futures = pool_addresses.into_iter().map(|address| async move {
+            tx.get_contract_state(&address, None)
+                .await
+                .ok()
+                .flatten()
+                .map(|account| (address, account.account))
+        });
 
-        self.pool_states = res;
+        self.pool_states = FuturesUnordered::from_iter(futures)
+            .filter_map(|x| async move { x })
+            .collect()
+            .await;
+        println!(
+            "Loaded {} states in {:?}",
+            self.pool_states.len(),
+            start.elapsed()
+        );
 
         self
     }
 
     pub fn load_tokens_and_token_pairs(mut self) -> Self {
+        let start = std::time::Instant::now();
         let mut token_pairs = HashMap::new();
         let mut tokens = HashSet::new();
 
@@ -57,6 +72,12 @@ impl AppCache {
 
         self.token_pairs = token_pairs;
         self.tokens = tokens.into_iter().collect();
+        println!(
+            "Loaded {} tokens and {} token pairs in {:?}",
+            self.tokens.len(),
+            self.token_pairs.len(),
+            start.elapsed()
+        );
 
         self
     }
