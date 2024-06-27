@@ -35,6 +35,7 @@ struct Args {
 }
 
 pub async fn run_test() -> Result<()> {
+    env_logger::init();
     let args = Args::parse();
     dotenvy::from_filename(args.project_root.join(".env")).context("Failed to load .env file")?;
 
@@ -66,7 +67,7 @@ pub async fn run_test() -> Result<()> {
         }
     }
 
-    println!(
+    log::info!(
         "Found {} wallets and {} pools",
         wallet_nonce.len(),
         pool_addresses.len()
@@ -99,7 +100,7 @@ pub async fn run_test() -> Result<()> {
         })
         .collect::<Vec<SendData>>();
 
-    println!(
+    log::info!(
         "Generated {} payloads in {:?}",
         payloads.len(),
         start.elapsed()
@@ -120,7 +121,7 @@ pub async fn run_test() -> Result<()> {
             process_payload(client, payload, barrier, sleep_duration, num_swaps, counter).await
         });
     }
-    println!("Spawned dudos tasks");
+    log::info!("Spawned dudos tasks");
     tokio::spawn(async move {
         print_stats(counter).await;
     });
@@ -139,7 +140,7 @@ async fn process_payload(
 ) {
     for _ in 0..num_swaps {
         if let Err(e) = send_forward_and_backward(&client, &payload).await {
-            println!("Failed to send: {:?}", e);
+            log::info!("Failed to send: {:?}", e);
             continue;
         }
         tokio::time::sleep(sleep_duration).await;
@@ -181,7 +182,7 @@ async fn print_stats(counter: Arc<AtomicU64>) {
     let start = std::time::Instant::now();
     loop {
         let count = counter.load(std::sync::atomic::Ordering::Relaxed);
-        println!("Sent {} transactions in {:?}", count, start.elapsed());
+        log::info!("Sent {} transactions in {:?}", count, start.elapsed());
         tokio::time::sleep(Duration::from_secs(5)).await;
     }
 }

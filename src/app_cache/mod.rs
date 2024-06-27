@@ -41,7 +41,7 @@ impl AppCache {
             .filter_map(|x| async move { x })
             .collect()
             .await;
-        println!(
+        log::info!(
             "Loaded {} states in {:?}",
             self.pool_states.len(),
             start.elapsed()
@@ -72,7 +72,7 @@ impl AppCache {
 
         self.token_pairs = token_pairs;
         self.tokens = tokens.into_iter().collect();
-        println!(
+        log::info!(
             "Loaded {} tokens and {} token pairs in {:?}",
             self.tokens.len(),
             self.token_pairs.len(),
