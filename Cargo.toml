@@ -1,0 +1,21 @@
+[package]
+name = "nekroddos"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = "0.4.21"
+ton_block = { git = "https://github.com/broxus/ton-labs-block.git" }
+nekoton-abi = { git = "https://github.com/broxus/nekoton.git" }
+ton_types = { git = "https://github.com/broxus/ton-labs-types" }
+ton_abi = { git = "https://github.com/broxus/ton-labs-abi" }
+nekoton = { git = "https://github.com/broxus/nekoton.git", default-features = true }
+everscale-rpc-client = { git = "https://github.com/broxus/everscale-jrpc", rev="045c52237f55a45b76b09a7ee6ad7c7fc89fa3c9" }
+nekoton-utils = { git = "https://github.com/broxus/nekoton.git" }
+nekoton-contracts = { git = "https://github.com/broxus/nekoton.git" }
+anyhow = "1.0.86"
+rand = "0.8.5"
+once_cell = "1.19.0"
+ed25519-dalek = { git = "https://github.com/broxus/ed25519-dalek.git" }
+serde = { version = "1.0.203", features = ["derive"] }
+tokio = "1.38.0"
