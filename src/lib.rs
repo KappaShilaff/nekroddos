@@ -34,15 +34,23 @@ struct Args {
     endpoint: Url,
 
     #[clap(short, long)]
+    /// total swaps per wallet
     num_swaps: usize,
 
     #[clap(short, long)]
     rps: u32,
+
+    #[clap(short, long, default_value = "5")]
+    /// swap depth
+    depth: u8,
 }
 
 pub async fn run_test() -> Result<()> {
     env_logger::init();
     let args = Args::parse();
+    if args.depth < 2 {
+        panic!("Depth should be at least 2");
+    }
     dotenvy::from_filename(args.project_root.join(".env")).context("Failed to load .env file")?;
 
     let seed = dotenvy::var("BROXUS_PHRASE").context("SEED is not set")?;
@@ -107,7 +115,9 @@ pub async fn run_test() -> Result<()> {
             }
         })
         .map(|recipient| async {
-            let payload_meta = app_cache.generate_payloads(recipient.clone(), 5).await;
+            let payload_meta = app_cache
+                .generate_payloads(recipient.clone(), args.depth)
+                .await;
             SendData::new(
                 payload_meta,
                 Keypair::from_bytes(&keypair.to_bytes()).unwrap(),
