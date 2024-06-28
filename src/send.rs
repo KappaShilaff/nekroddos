@@ -3,7 +3,7 @@ use nekoton::core::ton_wallet::TransferAction;
 use nekoton::models::Expiration;
 use nekoton_utils::SimpleClock;
 use ton_abi::sign_with_signature_id;
-use ton_block::{GetRepresentationHash, MsgAddressInt};
+use ton_block::{AccountStuff, GetRepresentationHash, MsgAddressInt};
 use ton_types::{BuilderData, IBitstring, SliceData};
 
 pub async fn send(
@@ -14,8 +14,8 @@ pub async fn send(
     destination: MsgAddressInt,
     amount: u64,
     sign_id: Option<i32>,
+    state: &AccountStuff,
 ) -> anyhow::Result<()> {
-    let state = client.get_contract_state(&from, None).await?.unwrap();
     let gift = nekoton::core::ton_wallet::Gift {
         flags: 3,
         bounce: false,
@@ -30,7 +30,7 @@ pub async fn send(
     let message = nekoton::core::ton_wallet::ever_wallet::prepare_transfer(
         &SimpleClock,
         &signer.public,
-        &state.account,
+        state,
         from.clone(),
         vec![gift],
         Expiration::Timestamp(now),
@@ -50,7 +50,7 @@ pub async fn send(
 pub fn compute_contract_address(
     public_key: &PublicKey,
     workchain_id: i8,
-    nonce: u64,
+    nonce: u32,
 ) -> MsgAddressInt {
     let hash = make_state_init(public_key, nonce)
         .and_then(|state| state.hash())
@@ -62,10 +62,11 @@ pub fn compute_contract_address(
     ))
 }
 
-pub fn make_state_init(public_key: &PublicKey, nonce: u64) -> anyhow::Result<ton_block::StateInit> {
+pub fn make_state_init(public_key: &PublicKey, nonce: u32) -> anyhow::Result<ton_block::StateInit> {
     let mut data = BuilderData::new();
     data.append_raw(public_key.as_bytes(), 256)?
-        .append_u64(nonce)?;
+        .append_u64(0)?
+        .append_u32(nonce)?;
     let data = data.into_cell()?;
 
     Ok(ton_block::StateInit {
@@ -73,4 +74,22 @@ pub fn make_state_init(public_key: &PublicKey, nonce: u64) -> anyhow::Result<ton
         data: Some(data),
         ..Default::default()
     })
+}
+
+#[cfg(test)]
+mod test {
+    use ed25519_dalek::PublicKey;
+
+    #[test]
+    fn test() {
+        let pubkey =
+            hex::decode("6f4a7a2cf5f799dc1493c117dd87d074f3c37f21552e604ff5fbae649d58c96b")
+                .unwrap();
+        let pubkey = PublicKey::from_bytes(&pubkey).unwrap();
+        let addr = super::compute_contract_address(&pubkey, 0, 6489);
+        assert_eq!(
+            addr.to_string(),
+            "0:26c84e441ed5353a391018409c8f623486974f7022f822548f394e3236dd1aac"
+        );
+    }
 }

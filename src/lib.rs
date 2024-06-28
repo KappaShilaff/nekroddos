@@ -7,7 +7,9 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use ed25519_dalek::Keypair;
 use everscale_rpc_client::RpcClient;
+use futures_util::StreamExt;
 use tokio::sync::Barrier;
+use ton_block::AccountStuff;
 use url::Url;
 
 use crate::models::{EverWalletInfo, GenericDeploymentInfo, SendData};
@@ -86,9 +88,19 @@ pub async fn run_test() -> Result<()> {
         .load_tokens_and_token_pairs();
 
     let start = std::time::Instant::now();
-    let payloads = recipients
-        .into_iter()
-        .map(|recipient| {
+    let payloads = futures_util::stream::iter(recipients)
+        .filter(|x| {
+            let client = client.clone();
+            let addr = x.clone();
+            async move {
+                client
+                    .get_contract_state(&addr, None)
+                    .await
+                    .unwrap()
+                    .is_some()
+            }
+        })
+        .map(|recipient| async {
             let payload_meta = app_cache.generate_payloads(recipient.clone(), 5);
             SendData::new(
                 payload_meta,
@@ -96,7 +108,9 @@ pub async fn run_test() -> Result<()> {
                 recipient,
             )
         })
-        .collect::<Vec<SendData>>();
+        .buffered(100)
+        .collect::<Vec<SendData>>()
+        .await;
 
     log::info!(
         "Generated {} payloads in {:?}",
@@ -136,8 +150,13 @@ async fn process_payload(
     num_swaps: usize,
     counter: Arc<AtomicU64>,
 ) {
+    let state = client
+        .get_contract_state(&payload.sender_addr, None)
+        .await
+        .unwrap()
+        .unwrap();
     for _ in 0..num_swaps {
-        if let Err(e) = send_forward_and_backward(&client, &payload).await {
+        if let Err(e) = send_forward_and_backward(&client, &payload, &state.account).await {
             log::info!("Failed to send: {:?}", e);
             continue;
         }
@@ -148,7 +167,11 @@ async fn process_payload(
     barrier.wait().await;
 }
 
-async fn send_forward_and_backward(client: &RpcClient, payload: &SendData) -> Result<()> {
+async fn send_forward_and_backward(
+    client: &RpcClient,
+    payload: &SendData,
+    state: &AccountStuff,
+) -> Result<()> {
     let forward_route = &payload.payload_meta.forward_route;
     send::send(
         client,
@@ -158,6 +181,7 @@ async fn send_forward_and_backward(client: &RpcClient, payload: &SendData) -> Re
         forward_route.first_pool_address.clone(),
         3_000_000_000,
         None,
+        state,
     )
     .await?;
 
@@ -170,6 +194,7 @@ async fn send_forward_and_backward(client: &RpcClient, payload: &SendData) -> Re
         backward_route.first_pool_address.clone(),
         3_000_000_000,
         None,
+        state,
     )
     .await?;
 

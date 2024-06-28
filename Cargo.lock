@@ -1320,6 +1320,7 @@ dependencies = [
  "env_logger",
  "everscale-rpc-client",
  "futures-util",
+ "hex",
  "log",
  "nekoton",
  "nekoton-abi",

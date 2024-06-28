@@ -10,7 +10,7 @@ nekoton-abi = { git = "https://github.com/broxus/nekoton.git" }
 ton_types = { git = "https://github.com/broxus/ton-labs-types" }
 ton_abi = { git = "https://github.com/broxus/ton-labs-abi" }
 nekoton = { git = "https://github.com/broxus/nekoton.git", default-features = true }
-everscale-rpc-client = { git = "https://github.com/broxus/everscale-jrpc", rev="045c52237f55a45b76b09a7ee6ad7c7fc89fa3c9" }
+everscale-rpc-client = { git = "https://github.com/broxus/everscale-jrpc", rev = "045c52237f55a45b76b09a7ee6ad7c7fc89fa3c9" }
 nekoton-utils = { git = "https://github.com/broxus/nekoton.git" }
 nekoton-contracts = { git = "https://github.com/broxus/nekoton.git" }
 anyhow = "1.0.86"
@@ -26,3 +26,9 @@ serde_json = "1.0.118"
 url = { version = "2.5.2", features = ["serde"] }
 futures-util = "0.3.30"
 env_logger = "0.11.3"
+
+[dev-dependencies]
+hex = "0.4.3"
+
+[profile.release]
+panic = "abort"

@@ -49,7 +49,7 @@ fn build_payload(
         })
         .collect();
 
-    let tokens = dbg!(DexPairV9BuildCrossPairExchangePayloadV2 {
+    let tokens = DexPairV9BuildCrossPairExchangePayloadV2 {
         id: 0,
         deploy_wallet_grams: 0, // todo!
         expected_amount: 0,
@@ -60,9 +60,8 @@ fn build_payload(
         referrer: MsgAddressInt::default(),
         success_payload: None,
         cancel_payload: None,
-    })
+    }
     .pack();
-    log::error!("ADDR: {}", first_pool.pool_address.to_string());
 
     let payload = dex_pair()
         .function("buildCrossPairExchangePayloadV2")

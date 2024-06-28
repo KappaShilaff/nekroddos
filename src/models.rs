@@ -131,7 +131,7 @@ impl SendData {
 
 #[derive(Serialize, Deserialize)]
 pub struct CreateAccountParams {
-    pub nonce: u64,
+    pub nonce: u32,
 }
 
 #[derive(Serialize, Deserialize)]
