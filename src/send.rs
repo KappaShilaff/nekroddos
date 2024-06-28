@@ -6,6 +6,7 @@ use ton_abi::sign_with_signature_id;
 use ton_block::{AccountStuff, GetRepresentationHash, MsgAddressInt};
 use ton_types::{BuilderData, IBitstring, SliceData};
 
+#[allow(clippy::too_many_arguments)]
 pub async fn send(
     client: &everscale_rpc_client::RpcClient,
     signer: &Keypair,

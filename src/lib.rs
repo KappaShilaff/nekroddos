@@ -1,3 +1,4 @@
+use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
@@ -8,6 +9,9 @@ use clap::Parser;
 use ed25519_dalek::Keypair;
 use everscale_rpc_client::RpcClient;
 use futures_util::StreamExt;
+use governor::clock::DefaultClock;
+use governor::state::{InMemoryState, NotKeyed};
+use governor::{Jitter, RateLimiter};
 use tokio::sync::Barrier;
 use ton_block::AccountStuff;
 use url::Url;
@@ -33,7 +37,7 @@ struct Args {
     num_swaps: usize,
 
     #[clap(short, long)]
-    sleep_ms: u64,
+    rps: u32,
 }
 
 pub async fn run_test() -> Result<()> {
@@ -87,6 +91,8 @@ pub async fn run_test() -> Result<()> {
         .await
         .load_tokens_and_token_pairs();
 
+    log::info!("Loaded app cache");
+
     let start = std::time::Instant::now();
     let payloads = futures_util::stream::iter(recipients)
         .filter(|x| {
@@ -122,15 +128,21 @@ pub async fn run_test() -> Result<()> {
     let barrier = Arc::new(barrier);
 
     let num_swaps = args.num_swaps;
-    let sleep_duration = Duration::from_millis(args.sleep_ms);
+
+    let rps = args.rps / 2; // forward and backward
+    let quota = governor::Quota::per_minute(NonZeroU32::new(rps * 60).unwrap())
+        .allow_burst(NonZeroU32::new(rps / 10).unwrap());
+
+    let rate_limiter = Arc::new(governor::RateLimiter::direct(quota));
     let counter = Arc::new(AtomicU64::new(0));
 
     for payload in payloads {
         let client = client.clone();
         let barrier = barrier.clone();
         let counter = counter.clone();
+        let rate_limiter = rate_limiter.clone();
         tokio::spawn(async move {
-            process_payload(client, payload, barrier, sleep_duration, num_swaps, counter).await
+            process_payload(client, payload, barrier, rate_limiter, num_swaps, counter).await
         });
     }
     log::info!("Spawned dudos tasks");
@@ -146,7 +158,7 @@ async fn process_payload(
     client: RpcClient,
     payload: SendData,
     barrier: Arc<Barrier>,
-    sleep_duration: Duration,
+    rl: Arc<RateLimiter<NotKeyed, InMemoryState, DefaultClock>>,
     num_swaps: usize,
     counter: Arc<AtomicU64>,
 ) {
@@ -155,12 +167,13 @@ async fn process_payload(
         .await
         .unwrap()
         .unwrap();
+    let jitter = Jitter::new(Duration::from_millis(1), Duration::from_millis(50));
     for _ in 0..num_swaps {
+        rl.until_ready_with_jitter(jitter).await;
         if let Err(e) = send_forward_and_backward(&client, &payload, &state.account).await {
             log::info!("Failed to send: {:?}", e);
             continue;
         }
-        tokio::time::sleep(sleep_duration).await;
         counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
