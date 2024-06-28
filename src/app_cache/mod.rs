@@ -19,16 +19,27 @@ fn build_answer_id_camel() -> ton_abi::Token {
     )
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct AppCache {
     pub pool_states: HashMap<MsgAddressInt, AccountStuff>,
     pub token_pairs: HashMap<(MsgAddressInt, MsgAddressInt), MsgAddressInt>,
     pub tokens: Vec<MsgAddressInt>,
+    pub tx: RpcClient,
 }
 
 impl AppCache {
-    pub async fn load_states(mut self, tx: &RpcClient, pool_addresses: Vec<MsgAddressInt>) -> Self {
+    pub fn new(tx: RpcClient) -> Self {
+        Self {
+            pool_states: HashMap::new(),
+            token_pairs: HashMap::new(),
+            tokens: Vec::new(),
+            tx,
+        }
+    }
+
+    pub async fn load_states(mut self, pool_addresses: Vec<MsgAddressInt>) -> Self {
         let start = std::time::Instant::now();
+        let tx = &self.tx;
         let futures = pool_addresses.into_iter().map(|address| async move {
             tx.get_contract_state(&address, None)
                 .await
@@ -82,7 +93,7 @@ impl AppCache {
         self
     }
 
-    pub fn generate_payloads(&self, recipient: MsgAddressInt, steps_len: u8) -> PayloadMeta {
+    pub async fn generate_payloads(&self, recipient: MsgAddressInt, steps_len: u8) -> PayloadMeta {
         let route = self.generate_route(steps_len);
         build_double_side_payloads(
             PayloadInput {
@@ -92,6 +103,7 @@ impl AppCache {
             },
             self,
         )
+        .await
     }
 
     fn generate_route(&self, steps_len: u8) -> Vec<StepInput> {

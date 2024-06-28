@@ -82,8 +82,8 @@ pub async fn run_test() -> Result<()> {
         .await
         .unwrap();
 
-    let app_cache = app_cache::AppCache::default()
-        .load_states(&client, pool_addresses)
+    let app_cache = app_cache::AppCache::new(client.clone())
+        .load_states(pool_addresses)
         .await
         .load_tokens_and_token_pairs();
 
@@ -101,7 +101,7 @@ pub async fn run_test() -> Result<()> {
             }
         })
         .map(|recipient| async {
-            let payload_meta = app_cache.generate_payloads(recipient.clone(), 5);
+            let payload_meta = app_cache.generate_payloads(recipient.clone(), 5).await;
             SendData::new(
                 payload_meta,
                 Keypair::from_bytes(&keypair.to_bytes()).unwrap(),
@@ -178,7 +178,7 @@ async fn send_forward_and_backward(
         &payload.signer,
         payload.sender_addr.clone(),
         forward_route.payload.clone(),
-        forward_route.first_pool_address.clone(),
+        forward_route.destination.clone(),
         3_000_000_000,
         None,
         state,
@@ -191,7 +191,7 @@ async fn send_forward_and_backward(
         &payload.signer,
         payload.sender_addr.clone(),
         backward_route.payload.clone(),
-        backward_route.first_pool_address.clone(),
+        backward_route.destination.clone(),
         3_000_000_000,
         None,
         state,

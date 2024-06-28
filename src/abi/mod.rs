@@ -23,4 +23,5 @@ impl OnceCellExt for OnceCell<Contract> {
 declare_abi! {
     dex_pair => "DexPair.abi.json",
     token_wallet => "TokenWallet.abi.json",
+    token_root => "TokenRoot.abi.json",
 }

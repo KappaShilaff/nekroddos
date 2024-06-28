@@ -1,30 +1,36 @@
-use crate::abi::{dex_pair, token_wallet};
+use crate::abi::{dex_pair, token_root, token_wallet};
 use crate::app_cache::AppCache;
 use crate::models::{
     DexPairV9BuildCrossPairExchangePayloadV2, DexPairV9Steps, PayloadInput, PayloadMeta, RouteMeta,
     StepInput, Transfer,
 };
+use everscale_rpc_client::RpcClient;
 use nekoton::utils::{SimpleClock, TrustMe};
-use nekoton_abi::{FunctionExt, PackAbiPlain};
-use ton_abi::TokenValue;
+use nekoton_abi::num_bigint::BigUint;
+use nekoton_abi::{BuildTokenValue, FunctionExt, PackAbiPlain};
+use ton_abi::{Token, TokenValue, Uint};
 use ton_block::MsgAddressInt;
 
-pub fn build_double_side_payloads(mut input: PayloadInput, app_cache: &AppCache) -> PayloadMeta {
-    let forward_route = build_payload(input.recipient.clone(), input.steps.clone(), app_cache);
+pub async fn build_double_side_payloads(
+    mut input: PayloadInput,
+    app_cache: &AppCache,
+) -> PayloadMeta {
+    let forward_route =
+        build_payload(input.recipient.clone(), input.steps.clone(), app_cache).await;
 
     input.steps.reverse();
     input.steps.iter_mut().for_each(|x| {
         std::mem::swap(&mut x.from_currency_address, &mut x.to_currency_address);
     });
 
-    let backward_route = build_payload(input.recipient, input.steps, app_cache);
+    let backward_route = build_payload(input.recipient, input.steps, app_cache).await;
     PayloadMeta {
         forward_route,
         backward_route,
     }
 }
 
-fn build_payload(
+async fn build_payload(
     recipient: MsgAddressInt,
     mut steps: Vec<StepInput>,
     app_cache: &AppCache,
@@ -97,11 +103,14 @@ fn build_payload(
         amount: 100_000, // todo!
         recipient: first_pool.pool_address.clone(),
         deploy_wallet_value: 0,
-        remaining_gas_to: recipient,
+        remaining_gas_to: recipient.clone(),
         notify: true,
         payload,
     }
     .pack();
+
+    let destination =
+        get_wallet_of(&app_cache.tx, &first_pool.from_currency_address, recipient).await;
 
     RouteMeta {
         payload: token_wallet()
@@ -109,6 +118,43 @@ fn build_payload(
             .unwrap()
             .encode_internal_input(&transfer_tokens)
             .unwrap(),
-        first_pool_address: first_pool.pool_address,
+        destination,
     }
+}
+
+async fn get_wallet_of(
+    tx: &RpcClient,
+    from_token_root: &MsgAddressInt,
+    recipient: MsgAddressInt,
+) -> MsgAddressInt {
+    let res = tx
+        .run_local(
+            from_token_root,
+            token_root().function("walletOf").unwrap(),
+            &[
+                Token::new(
+                    "answerId",
+                    TokenValue::Uint(Uint {
+                        number: BigUint::from(0_u32),
+                        size: 32,
+                    }),
+                ),
+                Token::new("walletOwner", recipient.clone().token_value()),
+            ],
+        )
+        .await
+        .unwrap()
+        .unwrap()
+        .tokens
+        .and_then(|x| x.into_iter().next())
+        .unwrap();
+
+    let wallet_token = match res.value {
+        TokenValue::Address(x) => x,
+        _ => {
+            panic!("walletOf return not address, recipient: {recipient}, token_root: {from_token_root}")
+        }
+    };
+
+    wallet_token.clone().to_msg_addr_int().unwrap()
 }

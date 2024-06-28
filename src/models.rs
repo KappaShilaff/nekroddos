@@ -110,7 +110,7 @@ pub struct PayloadMeta {
 
 pub struct RouteMeta {
     pub payload: BuilderData,
-    pub first_pool_address: MsgAddressInt,
+    pub destination: MsgAddressInt,
 }
 
 pub struct SendData {
