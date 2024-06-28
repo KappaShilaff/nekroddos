@@ -9,10 +9,8 @@
   "functions": [
     {
       "name": "constructor",
-      "inputs": [
-      ],
-      "outputs": [
-      ]
+      "inputs": [],
+      "outputs": []
     },
     {
       "name": "buildExchangePayload",
@@ -187,10 +185,6 @@
         {
           "name": "_cancelPayload",
           "type": "optional(cell)"
-        },
-        {
-          "name": "_toNative",
-          "type": "optional(bool)"
         }
       ],
       "outputs": [
@@ -301,10 +295,6 @@
         {
           "name": "_cancelPayload",
           "type": "optional(cell)"
-        },
-        {
-          "name": "_toNative",
-          "type": "optional(bool)"
         }
       ],
       "outputs": [
@@ -443,8 +433,7 @@
           "type": "address"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "expectedWithdrawLiquidity",
@@ -517,8 +506,7 @@
           "type": "address"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "expectedExchange",
@@ -622,8 +610,7 @@
           "type": "address"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "crossPoolExchange",
@@ -669,10 +656,6 @@
           "type": "address"
         },
         {
-          "name": "_toNative",
-          "type": "bool"
-        },
-        {
           "name": "_remainingGasTo",
           "type": "address"
         },
@@ -701,8 +684,7 @@
           "type": "cell"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "onAcceptTokensTransfer",
@@ -732,8 +714,7 @@
           "type": "cell"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "getRoot",
@@ -987,8 +968,7 @@
           "type": "address"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "withdrawBeneficiaryFee",
@@ -998,8 +978,7 @@
           "type": "address"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "checkPair",
@@ -1013,8 +992,7 @@
           "type": "uint32"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "upgrade",
@@ -1036,8 +1014,7 @@
           "type": "address"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "liquidityTokenRootDeployed",
@@ -1051,8 +1028,7 @@
           "type": "address"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "liquidityTokenRootNotDeployed",
@@ -1066,8 +1042,7 @@
           "type": "address"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "onTokenWallet",
@@ -1077,8 +1052,7 @@
           "type": "address"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "setActive",
@@ -1092,8 +1066,7 @@
           "type": "address"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "setOracleOptions",
@@ -1125,8 +1098,7 @@
           "type": "address"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "getOracleOptions",
@@ -1173,8 +1145,7 @@
           "type": "address"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "getObservation",
@@ -1225,8 +1196,7 @@
           "type": "cell"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "getRate",
@@ -1293,8 +1263,7 @@
           "type": "cell"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "getExpectedAmountByTWAP",
@@ -1329,8 +1298,7 @@
     },
     {
       "name": "platform_code",
-      "inputs": [
-      ],
+      "inputs": [],
       "outputs": [
         {
           "name": "platform_code",
@@ -1339,8 +1307,7 @@
       ]
     }
   ],
-  "data": [
-  ],
+  "data": [],
   "events": [
     {
       "name": "OracleInitialized",
@@ -1364,8 +1331,7 @@
           "type": "tuple"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "OracleUpdated",
@@ -1389,8 +1355,7 @@
           "type": "tuple"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "OracleOptionsUpdated",
@@ -1418,8 +1383,7 @@
           "type": "tuple"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "PairCodeUpgraded",
@@ -1433,8 +1397,7 @@
           "type": "uint8"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "ActiveStatusUpdated",
@@ -1448,8 +1411,7 @@
           "type": "bool"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "FeesParamsUpdated",
@@ -1489,8 +1451,7 @@
           "type": "tuple"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "DepositLiquidity",
@@ -1522,8 +1483,7 @@
           "type": "uint128"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "WithdrawLiquidity",
@@ -1555,8 +1515,7 @@
           "type": "tuple[]"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "Exchange",
@@ -1608,8 +1567,7 @@
           "type": "tuple[]"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "ReferrerFees",
@@ -1629,8 +1587,7 @@
           "type": "tuple[]"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     },
     {
       "name": "Sync",
@@ -1644,8 +1601,7 @@
           "type": "uint128"
         }
       ],
-      "outputs": [
-      ]
+      "outputs": []
     }
   ],
   "fields": [
