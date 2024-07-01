@@ -178,9 +178,11 @@ async fn process_payload(
         .unwrap()
         .unwrap();
     let jitter = Jitter::new(Duration::from_millis(1), Duration::from_millis(50));
-    for _ in 0..num_swaps {
+    for seqno in 0..num_swaps {
         rl.until_ready_with_jitter(jitter).await;
-        if let Err(e) = send_forward_and_backward(&client, &payload, &state.account).await {
+        if let Err(e) =
+            send_forward_and_backward(&client, &payload, &state.account, seqno as u32).await
+        {
             log::info!("Failed to send: {:?}", e);
             continue;
         }
@@ -194,6 +196,7 @@ async fn send_forward_and_backward(
     client: &RpcClient,
     payload: &SendData,
     state: &AccountStuff,
+    seq_no: u32,
 ) -> Result<()> {
     let forward_route = &payload.payload_meta.forward_route;
     send::send(
