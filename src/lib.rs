@@ -166,14 +166,14 @@ pub async fn run_test() -> Result<()> {
 
 async fn process_payload(
     client: RpcClient,
-    payload: SendData,
+    mut send_data: SendData,
     barrier: Arc<Barrier>,
     rl: Arc<RateLimiter<NotKeyed, InMemoryState, DefaultClock>>,
     num_swaps: usize,
     counter: Arc<AtomicU64>,
 ) {
     let state = client
-        .get_contract_state(&payload.sender_addr, None)
+        .get_contract_state(&send_data.sender_addr, None)
         .await
         .unwrap()
         .unwrap();
@@ -181,7 +181,7 @@ async fn process_payload(
     for seqno in 0..num_swaps {
         rl.until_ready_with_jitter(jitter).await;
         if let Err(e) =
-            send_forward_and_backward(&client, &payload, &state.account, seqno as u32).await
+            send_forward_and_backward(&client, &mut send_data, &state.account, seqno as u32).await
         {
             log::info!("Failed to send: {:?}", e);
             continue;
@@ -194,30 +194,30 @@ async fn process_payload(
 
 async fn send_forward_and_backward(
     client: &RpcClient,
-    payload: &SendData,
+    payload: &mut SendData,
     state: &AccountStuff,
     seq_no: u32,
 ) -> Result<()> {
-    let forward_route = &payload.payload_meta.forward_route;
+    let forward_meta = &payload.payload_generators.forward.generate_payload_meta();
     send::send(
         client,
         &payload.signer,
         payload.sender_addr.clone(),
-        forward_route.payload.clone(),
-        forward_route.destination.clone(),
+        forward_meta.payload.clone(),
+        forward_meta.destination.clone(),
         3_000_000_000,
         None,
         state,
     )
     .await?;
 
-    let backward_route = &payload.payload_meta.backward_route;
+    let backward_meta = &payload.payload_generators.backward.generate_payload_meta();
     send::send(
         client,
         &payload.signer,
         payload.sender_addr.clone(),
-        backward_route.payload.clone(),
-        backward_route.destination.clone(),
+        backward_meta.payload.clone(),
+        backward_meta.destination.clone(),
         3_000_000_000,
         None,
         state,

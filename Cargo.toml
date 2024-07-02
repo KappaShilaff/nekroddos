@@ -27,6 +27,7 @@ url = { version = "2.5.2", features = ["serde"] }
 futures-util = "0.3.30"
 env_logger = "0.11.3"
 governor = "0.6.3"
+chrono = "0.4.38"
 
 [dev-dependencies]
 hex = "0.4.3"

@@ -9,8 +9,8 @@ use rand::prelude::SliceRandom;
 use ton_block::{AccountStuff, MsgAddressInt};
 
 use crate::abi::dex_pair;
-use crate::build_payload::build_double_side_payloads;
-use crate::models::{GetTokenRoots, PayloadInput, PayloadMeta, StepInput};
+use crate::build_payload::build_double_side_payloads_data;
+use crate::models::{GetTokenRoots, PayloadGeneratorsData, PayloadInput, StepInput};
 
 fn build_answer_id_camel() -> ton_abi::Token {
     ton_abi::Token::new(
@@ -93,13 +93,12 @@ impl AppCache {
         self
     }
 
-    pub async fn generate_payloads(&self, recipient: MsgAddressInt, steps_len: u8) -> PayloadMeta {
+    pub async fn generate_payloads(&self, recipient: MsgAddressInt, steps_len: u8) -> PayloadGeneratorsData {
         let route = self.generate_route(steps_len);
-        build_double_side_payloads(
+        build_double_side_payloads_data(
             PayloadInput {
                 steps: route,
                 recipient,
-                id: 0,
             },
             self,
         )

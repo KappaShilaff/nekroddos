@@ -1,8 +1,10 @@
+use chrono::Utc;
 use ed25519_dalek::Keypair;
-use nekoton_abi::{PackAbi, PackAbiPlain, UnpackAbiPlain};
-use nekoton_utils::serde_address;
+use nekoton_abi::{BuildTokenValue, FunctionExt, PackAbi, PackAbiPlain, UnpackAbiPlain};
+use nekoton_utils::{serde_address, SimpleClock};
 use serde::{Deserialize, Serialize};
-use ton_block::MsgAddressInt;
+use ton_abi::{Function, Token, TokenValue, Uint};
+use ton_block::{AccountStuff, MsgAddressInt};
 use ton_types::{BuilderData, Cell};
 
 #[derive(Debug, Clone, PackAbiPlain)]
@@ -44,7 +46,6 @@ pub struct Transfer {
 pub struct PayloadInput {
     pub steps: Vec<StepInput>,
     pub recipient: MsgAddressInt,
-    pub id: u64,
 }
 
 #[derive(Clone)]
@@ -103,26 +104,30 @@ pub struct DexPairV9Steps {
     pub next_step_indices: Vec<u32>,
 }
 
-pub struct PayloadMeta {
-    pub forward_route: RouteMeta,
-    pub backward_route: RouteMeta,
+pub struct PayloadGeneratorsData {
+    pub forward: PayloadGenerator,
+    pub backward: PayloadGenerator,
 }
 
-pub struct RouteMeta {
+pub struct PayloadMeta {
     pub payload: BuilderData,
     pub destination: MsgAddressInt,
 }
 
 pub struct SendData {
-    pub payload_meta: PayloadMeta,
+    pub payload_generators: PayloadGeneratorsData,
     pub signer: Keypair,
     pub sender_addr: MsgAddressInt,
 }
 
 impl SendData {
-    pub fn new(payload_meta: PayloadMeta, signer: Keypair, sender_addr: MsgAddressInt) -> Self {
+    pub fn new(
+        payload_generators: PayloadGeneratorsData,
+        signer: Keypair,
+        sender_addr: MsgAddressInt,
+    ) -> Self {
         Self {
-            payload_meta,
+            payload_generators,
             signer,
             sender_addr,
         }
@@ -144,4 +149,61 @@ pub struct EverWalletInfo {
 pub struct GenericDeploymentInfo {
     #[serde(with = "serde_address")]
     pub address: MsgAddressInt,
+}
+
+pub struct PayloadGenerator {
+    pub first_pool_state: AccountStuff,
+    pub swap_fun: Function,
+    pub transfer_fun: Function,
+    pub destination: MsgAddressInt,
+    pub tokens: PayloadTokens,
+}
+
+pub struct PayloadTokens {
+    pub swap: Vec<Token>,
+    pub transfer: Vec<Token>,
+}
+
+impl PayloadGenerator {
+    pub fn generate_payload_meta(&mut self) -> PayloadMeta {
+        let id_token = self.tokens.swap.get_mut(0).unwrap();
+        id_token.value =
+            TokenValue::Uint(Uint::new(Utc::now().timestamp_subsec_nanos() as u128, 64));
+
+        let payload = &self
+            .swap_fun
+            .run_local(
+                &SimpleClock,
+                self.first_pool_state.clone(),
+                &self.tokens.swap,
+            )
+            .map_err(|x| {
+                log::error!("run_local error {:#?}", x);
+                x
+            })
+            .ok()
+            .and_then(|x| {
+                if x.tokens.is_none() {
+                    log::error!("run_local tokens none, result_code: {}", x.result_code);
+                }
+                x.tokens
+            })
+            .and_then(|x| x.into_iter().next())
+            .and_then(|x| match x.value {
+                TokenValue::Cell(x) => Some(x),
+                _ => None,
+            })
+            .unwrap();
+
+        let payload_token = self.tokens.transfer.get_mut(5).unwrap();
+        payload_token.value = payload.token_value();
+
+        PayloadMeta {
+            payload: self
+                .transfer_fun
+                .encode_internal_input(&self.tokens.transfer)
+                .unwrap(),
+            destination: self.destination.clone(),
+        }
+    }
 }

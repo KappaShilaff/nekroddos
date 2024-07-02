@@ -1,40 +1,40 @@
 use crate::abi::{dex_pair, token_root, token_wallet};
 use crate::app_cache::AppCache;
 use crate::models::{
-    DexPairV9BuildCrossPairExchangePayloadV2, DexPairV9Steps, PayloadInput, PayloadMeta, RouteMeta,
-    StepInput, Transfer,
+    DexPairV9BuildCrossPairExchangePayloadV2, DexPairV9Steps, PayloadGenerator,
+    PayloadGeneratorsData, PayloadInput, PayloadTokens, StepInput, Transfer,
 };
 use everscale_rpc_client::RpcClient;
-use nekoton::utils::{SimpleClock, TrustMe};
+use nekoton::utils::TrustMe;
 use nekoton_abi::num_bigint::BigUint;
-use nekoton_abi::{BuildTokenValue, FunctionExt, PackAbiPlain};
+use nekoton_abi::{BuildTokenValue, PackAbiPlain};
 use ton_abi::{Token, TokenValue, Uint};
 use ton_block::MsgAddressInt;
 
-pub async fn build_double_side_payloads(
+pub async fn build_double_side_payloads_data(
     mut input: PayloadInput,
     app_cache: &AppCache,
-) -> PayloadMeta {
+) -> PayloadGeneratorsData {
     let forward_route =
-        build_payload(input.recipient.clone(), input.steps.clone(), app_cache).await;
+        build_route_data(input.recipient.clone(), input.steps.clone(), app_cache).await;
 
     input.steps.reverse();
     input.steps.iter_mut().for_each(|x| {
         std::mem::swap(&mut x.from_currency_address, &mut x.to_currency_address);
     });
 
-    let backward_route = build_payload(input.recipient, input.steps, app_cache).await;
-    PayloadMeta {
-        forward_route,
-        backward_route,
+    let backward_route = build_route_data(input.recipient, input.steps, app_cache).await;
+    PayloadGeneratorsData {
+        forward: forward_route,
+        backward: backward_route,
     }
 }
 
-async fn build_payload(
+async fn build_route_data(
     recipient: MsgAddressInt,
     mut steps: Vec<StepInput>,
     app_cache: &AppCache,
-) -> RouteMeta {
+) -> PayloadGenerator {
     let first_pool = steps.remove(0);
     let chain_len = steps.len();
 
@@ -55,9 +55,9 @@ async fn build_payload(
         })
         .collect();
 
-    let tokens = DexPairV9BuildCrossPairExchangePayloadV2 {
+    let swap_tokens = DexPairV9BuildCrossPairExchangePayloadV2 {
         id: 0,
-        deploy_wallet_grams: 0, // todo!
+        deploy_wallet_grams: 0,
         expected_amount: 0,
         outcoming: first_pool.to_currency_address,
         next_step_indices: vec![0],
@@ -69,56 +69,35 @@ async fn build_payload(
     }
     .pack();
 
-    let payload = dex_pair()
-        .function("buildCrossPairExchangePayloadV2")
-        .trust_me()
-        .run_local(
-            &SimpleClock,
-            app_cache
-                .pool_states
-                .get(&first_pool.pool_address)
-                .cloned()
-                .unwrap(),
-            &tokens,
-        )
-        .map_err(|x| {
-            log::error!("run_local error {:#?}", x);
-            x
-        })
-        .ok()
-        .and_then(|x| {
-            if x.tokens.is_none() {
-                log::error!("run_local tokens none, result_code: {}", x.result_code);
-            }
-            x.tokens
-        })
-        .and_then(|x| x.into_iter().next())
-        .and_then(|x| match x.value {
-            TokenValue::Cell(x) => Some(x),
-            _ => None,
-        })
-        .unwrap();
-
     let transfer_tokens = Transfer {
-        amount: 100_000, // todo!
+        amount: 100_000, // todo! conf
         recipient: first_pool.pool_address.clone(),
         deploy_wallet_value: 0,
         remaining_gas_to: recipient.clone(),
         notify: true,
-        payload,
+        payload: Default::default(),
     }
     .pack();
 
     let destination =
         get_wallet_of(&app_cache.tx, &first_pool.from_currency_address, recipient).await;
 
-    RouteMeta {
-        payload: token_wallet()
-            .function("transfer")
-            .unwrap()
-            .encode_internal_input(&transfer_tokens)
+    PayloadGenerator {
+        first_pool_state: app_cache
+            .pool_states
+            .get(&first_pool.pool_address)
+            .cloned()
             .unwrap(),
+        swap_fun: dex_pair()
+            .function("buildCrossPairExchangePayloadV2")
+            .cloned()
+            .unwrap(),
+        transfer_fun: token_wallet().function("transfer").cloned().unwrap(),
         destination,
+        tokens: PayloadTokens {
+            swap: swap_tokens,
+            transfer: transfer_tokens,
+        },
     }
 }
 
