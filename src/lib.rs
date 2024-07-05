@@ -138,8 +138,8 @@ pub async fn run_test() -> Result<()> {
     let barrier = Arc::new(barrier);
 
     let num_swaps = args.num_swaps;
+    let rps = args.rps;
 
-    let rps = args.rps / 2; // forward and backward
     let quota = governor::Quota::per_minute(NonZeroU32::new(rps * 60).unwrap())
         .allow_burst(NonZeroU32::new(rps / 10).unwrap());
 
@@ -178,10 +178,10 @@ async fn process_payload(
         .unwrap()
         .unwrap();
     let jitter = Jitter::new(Duration::from_millis(1), Duration::from_millis(50));
-    for seqno in 0..num_swaps {
+    for _ in 0..num_swaps {
         rl.until_ready_with_jitter(jitter).await;
         if let Err(e) =
-            send_forward_and_backward(&client, &mut send_data, &state.account, seqno as u32).await
+            send_forward_and_backward(&client, &mut send_data, &state.account, &rl, jitter).await
         {
             log::info!("Failed to send: {:?}", e);
             continue;
@@ -196,9 +196,11 @@ async fn send_forward_and_backward(
     client: &RpcClient,
     payload: &mut SendData,
     state: &AccountStuff,
-    seq_no: u32,
+    rl: &RateLimiter<NotKeyed, InMemoryState, DefaultClock>,
+    jitter: Jitter,
 ) -> Result<()> {
     let forward_meta = &payload.payload_generators.forward.generate_payload_meta();
+    rl.until_ready_with_jitter(jitter).await;
     send::send(
         client,
         &payload.signer,
@@ -212,6 +214,7 @@ async fn send_forward_and_backward(
     .await?;
 
     let backward_meta = &payload.payload_generators.backward.generate_payload_meta();
+    rl.until_ready_with_jitter(jitter).await;
     send::send(
         client,
         &payload.signer,
