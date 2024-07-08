@@ -6,6 +6,7 @@ use futures_util::StreamExt;
 use nekoton::utils::SimpleClock;
 use nekoton_abi::{FunctionExt, UnpackAbiPlain};
 use rand::prelude::SliceRandom;
+use rand::seq::IteratorRandom;
 use ton_block::{AccountStuff, MsgAddressInt};
 
 use crate::abi::dex_pair;
@@ -114,9 +115,11 @@ impl AppCache {
         exists_tokens.insert(from_token.clone());
 
         for _ in 0..steps_len {
+            let mut temp_tokens: HashSet<_> = self.tokens.clone().into_iter().collect();
             loop {
-                let to_token = self.tokens.choose(&mut rng).cloned().unwrap();
+                let to_token = temp_tokens.iter().choose(&mut rng).cloned().unwrap();
                 if exists_tokens.contains(&to_token) {
+                    temp_tokens.remove(&to_token);
                     continue;
                 }
 
@@ -131,6 +134,7 @@ impl AppCache {
                 {
                     (to_token.clone(), from_token.clone(), pool_address.clone())
                 } else {
+                    temp_tokens.remove(&to_token);
                     continue;
                 };
 
