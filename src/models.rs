@@ -135,14 +135,9 @@ impl SendData {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct CreateAccountParams {
-    pub nonce: u32,
-}
-
-#[derive(Serialize, Deserialize)]
 pub struct EverWalletInfo {
-    #[serde(rename = "createAccountParams")]
-    pub create_account_params: CreateAccountParams,
+    #[serde(with = "serde_address")]
+    pub address: MsgAddressInt,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

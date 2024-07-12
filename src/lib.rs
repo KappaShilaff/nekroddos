@@ -17,8 +17,6 @@ use ton_block::AccountStuff;
 use url::Url;
 
 use crate::models::{EverWalletInfo, GenericDeploymentInfo, SendData};
-use crate::send::compute_contract_address;
-
 mod abi;
 mod app_cache;
 mod build_payload;
@@ -59,7 +57,7 @@ pub async fn run_test() -> Result<()> {
             .context("Failed to derive keypair")?;
 
     let deployments_path = args.project_root.join("deployments");
-    let mut wallet_nonce = Vec::new();
+    let mut recipients = Vec::new();
     let mut pool_addresses = Vec::new();
 
     for file in walkdir::WalkDir::new(&deployments_path)
@@ -71,7 +69,7 @@ pub async fn run_test() -> Result<()> {
         let filename = file.file_name().to_string_lossy();
         if filename.contains("commonAccount") {
             let wallet_info: EverWalletInfo = serde_json::from_slice(&std::fs::read(file.path())?)?;
-            wallet_nonce.push(wallet_info.create_account_params.nonce);
+            recipients.push(wallet_info.address);
         }
         if filename.contains("DexPair") {
             let info: GenericDeploymentInfo = serde_json::from_slice(&std::fs::read(file.path())?)?;
@@ -81,14 +79,9 @@ pub async fn run_test() -> Result<()> {
 
     log::info!(
         "Found {} wallets and {} pools",
-        wallet_nonce.len(),
+        recipients.len(),
         pool_addresses.len()
     );
-
-    let recipients: Vec<_> = wallet_nonce
-        .iter()
-        .map(|nonce| compute_contract_address(&keypair.public, 0, *nonce))
-        .collect();
 
     let client = RpcClient::new(vec![args.endpoint], Default::default())
         .await
