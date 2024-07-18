@@ -104,6 +104,7 @@ pub struct DexPairV9Steps {
     pub next_step_indices: Vec<u32>,
 }
 
+#[derive(Clone)]
 pub struct PayloadGeneratorsData {
     pub forward: PayloadGenerator,
     pub backward: PayloadGenerator,
@@ -146,6 +147,7 @@ pub struct GenericDeploymentInfo {
     pub address: MsgAddressInt,
 }
 
+#[derive(Clone)]
 pub struct PayloadGenerator {
     pub first_pool_state: AccountStuff,
     pub swap_fun: Function,
@@ -154,6 +156,7 @@ pub struct PayloadGenerator {
     pub tokens: PayloadTokens,
 }
 
+#[derive(Clone)]
 pub struct PayloadTokens {
     pub swap: Vec<Token>,
     pub transfer: Vec<Token>,

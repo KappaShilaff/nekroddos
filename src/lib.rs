@@ -7,7 +7,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use clap::Parser;
 use ed25519_dalek::Keypair;
-use everscale_rpc_client::RpcClient;
+use everscale_rpc_client::{ClientOptions, RpcClient};
 use futures_util::StreamExt;
 use governor::clock::DefaultClock;
 use governor::state::{InMemoryState, NotKeyed};
@@ -16,7 +16,9 @@ use tokio::sync::Barrier;
 use ton_block::AccountStuff;
 use url::Url;
 
-use crate::models::{EverWalletInfo, GenericDeploymentInfo, SendData};
+use crate::models::{
+    EverWalletInfo, GenericDeploymentInfo, PayloadGeneratorsData, PayloadMeta, SendData,
+};
 mod abi;
 mod app_cache;
 mod build_payload;
@@ -83,9 +85,15 @@ pub async fn run_test() -> Result<()> {
         pool_addresses.len()
     );
 
-    let client = RpcClient::new(vec![args.endpoint], Default::default())
-        .await
-        .unwrap();
+    let client = RpcClient::new(
+        vec![args.endpoint],
+        ClientOptions {
+            request_timeout: Duration::from_secs(60),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
 
     let app_cache = app_cache::AppCache::new(client.clone())
         .load_states(pool_addresses)
@@ -170,11 +178,19 @@ async fn process_payload(
         .await
         .unwrap()
         .unwrap();
+
+    let mut generator = load_generator(send_data.payload_generators.clone());
     let jitter = Jitter::new(Duration::from_millis(1), Duration::from_millis(50));
     for _ in 0..num_swaps {
-        rl.until_ready_with_jitter(jitter).await;
-        if let Err(e) =
-            send_forward_and_backward(&client, &mut send_data, &state.account, &rl, jitter).await
+        if let Err(e) = send_forward_and_backward(
+            &client,
+            &mut send_data,
+            &state.account,
+            &rl,
+            jitter,
+            &mut generator,
+        )
+        .await
         {
             log::info!("Failed to send: {:?}", e);
             continue;
@@ -191,8 +207,10 @@ async fn send_forward_and_backward(
     state: &AccountStuff,
     rl: &RateLimiter<NotKeyed, InMemoryState, DefaultClock>,
     jitter: Jitter,
+    generator: &mut tokio::sync::mpsc::Receiver<(PayloadMeta, PayloadMeta)>,
 ) -> Result<()> {
-    let forward_meta = &payload.payload_generators.forward.generate_payload_meta();
+    let (forward_meta, backward_meta) = generator.recv().await.unwrap();
+
     rl.until_ready_with_jitter(jitter).await;
     send::send(
         client,
@@ -206,7 +224,6 @@ async fn send_forward_and_backward(
     )
     .await?;
 
-    let backward_meta = &payload.payload_generators.backward.generate_payload_meta();
     rl.until_ready_with_jitter(jitter).await;
     send::send(
         client,
@@ -221,6 +238,23 @@ async fn send_forward_and_backward(
     .await?;
 
     Ok(())
+}
+
+fn load_generator(
+    generator: PayloadGeneratorsData,
+) -> tokio::sync::mpsc::Receiver<(PayloadMeta, PayloadMeta)> {
+    let (tx, rx) = tokio::sync::mpsc::channel(100);
+    tokio::spawn(async move {
+        let mut generator = generator;
+        loop {
+            let forward = generator.forward.generate_payload_meta();
+            let backward = generator.backward.generate_payload_meta();
+            if tx.send((forward, backward)).await.is_err() {
+                break;
+            }
+        }
+    });
+    rx
 }
 
 async fn print_stats(counter: Arc<AtomicU64>) {
