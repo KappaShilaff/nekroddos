@@ -8,16 +8,16 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use ed25519_dalek::Keypair;
 use everscale_rpc_client::{ClientOptions, RpcClient};
-use futures_util::StreamExt;
 use governor::clock::DefaultClock;
 use governor::state::{InMemoryState, NotKeyed};
 use governor::{Jitter, RateLimiter};
+use regex::Regex;
 use tokio::sync::Barrier;
 use ton_block::AccountStuff;
 use url::Url;
 
 use crate::models::{
-    EverWalletInfo, GenericDeploymentInfo, PayloadGeneratorsData, PayloadMeta, SendData,
+    EverWalletInfo, GenericDeploymentInfo, PairInfo, PayloadGeneratorsData, PayloadMeta, SendData,
 };
 mod abi;
 mod app_cache;
@@ -62,6 +62,8 @@ pub async fn run_test() -> Result<()> {
     let mut recipients = Vec::new();
     let mut pool_addresses = Vec::new();
 
+    let re = Regex::new(r"Contract__DexPair-TEST-(\d+)TEST-(\d+)\.json").unwrap();
+
     for file in walkdir::WalkDir::new(&deployments_path)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -74,10 +76,20 @@ pub async fn run_test() -> Result<()> {
             recipients.push(wallet_info.address);
         }
         if filename.contains("DexPair") {
+            // Contract__DexPair-TEST-0TEST-1.json
             let info: GenericDeploymentInfo = serde_json::from_slice(&std::fs::read(file.path())?)?;
-            pool_addresses.push(info.address);
+            let caps = re.captures(&filename).unwrap();
+            let first = caps.get(1).unwrap().as_str().parse::<u32>().unwrap();
+
+            pool_addresses.push(PairInfo {
+                filename: filename.to_string(),
+                address: info.address,
+                index: first,
+            });
         }
     }
+
+    pool_addresses.sort();
 
     log::info!(
         "Found {} wallets and {} pools",
@@ -103,31 +115,17 @@ pub async fn run_test() -> Result<()> {
     log::info!("Loaded app cache");
 
     let start = std::time::Instant::now();
-    let payloads = futures_util::stream::iter(recipients)
-        .filter(|x| {
-            let client = client.clone();
-            let addr = x.clone();
-            async move {
-                client
-                    .get_contract_state(&addr, None)
-                    .await
-                    .unwrap()
-                    .is_some()
-            }
-        })
-        .map(|recipient| async {
-            let payload_meta = app_cache
-                .generate_payloads(recipient.clone(), args.depth)
-                .await;
-            SendData::new(
-                payload_meta,
-                Keypair::from_bytes(&keypair.to_bytes()).unwrap(),
-                recipient,
-            )
-        })
-        .buffered(100)
-        .collect::<Vec<SendData>>()
+    let payloads = app_cache
+        .generate_payloads(recipients.clone().into_iter(), args.depth)
         .await;
+    let payloads = payloads
+        .into_iter()
+        .zip(recipients.into_iter())
+        .map(|(x, addr)| SendData {
+            signer: Keypair::from_bytes(&keypair.to_bytes()).unwrap(),
+            sender_addr: addr,
+            payload_generators: x,
+        });
 
     log::info!(
         "Generated {} payloads in {:?}",

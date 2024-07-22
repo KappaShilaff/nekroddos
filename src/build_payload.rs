@@ -87,6 +87,7 @@ async fn build_route_data(
             .pool_states
             .get(&first_pool.pool_address)
             .cloned()
+            .map(|x| x.0)
             .unwrap(),
         swap_fun: dex_pair()
             .function("buildCrossPairExchangePayloadV2")

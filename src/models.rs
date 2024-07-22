@@ -121,20 +121,6 @@ pub struct SendData {
     pub sender_addr: MsgAddressInt,
 }
 
-impl SendData {
-    pub fn new(
-        payload_generators: PayloadGeneratorsData,
-        signer: Keypair,
-        sender_addr: MsgAddressInt,
-    ) -> Self {
-        Self {
-            payload_generators,
-            signer,
-            sender_addr,
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct EverWalletInfo {
     #[serde(with = "serde_address")]
@@ -160,6 +146,38 @@ pub struct PayloadGenerator {
 pub struct PayloadTokens {
     pub swap: Vec<Token>,
     pub transfer: Vec<Token>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PairInfo {
+    pub filename: String,
+    pub address: MsgAddressInt,
+    pub index: u32,
+}
+
+impl Eq for PairInfo {}
+impl PartialEq for PairInfo {
+    fn eq(&self, other: &Self) -> bool {
+        self.index == other.index
+    }
+}
+
+impl std::hash::Hash for PairInfo {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.index.hash(state);
+    }
+}
+
+impl PartialOrd for PairInfo {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.index.cmp(&other.index))
+    }
+}
+
+impl Ord for PairInfo {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.index.cmp(&other.index)
+    }
 }
 
 impl PayloadGenerator {
