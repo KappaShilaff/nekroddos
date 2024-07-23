@@ -43,6 +43,11 @@ struct Args {
     #[clap(short, long, default_value = "5")]
     /// swap depth
     depth: u8,
+
+    /// seed for rng
+    /// if you want to run multiple instances of the script with the same seed
+    #[clap(short, long)]
+    seed: Option<u64>,
 }
 
 pub async fn run_test() -> Result<()> {
@@ -84,6 +89,7 @@ pub async fn run_test() -> Result<()> {
         recipients.len(),
         pool_addresses.len()
     );
+    recipients.sort();
 
     let client = RpcClient::new(
         vec![args.endpoint],
@@ -95,39 +101,49 @@ pub async fn run_test() -> Result<()> {
     .await
     .unwrap();
 
-    let app_cache = app_cache::AppCache::new(client.clone())
+    let app_cache = app_cache::AppCache::new(client.clone(), args.seed)
         .load_states(pool_addresses)
         .await
-        .load_tokens_and_token_pairs();
+        .load_tokens_and_token_pairs()
+        .await;
 
     log::info!("Loaded app cache");
 
     let start = std::time::Instant::now();
-    let payloads = futures_util::stream::iter(recipients)
-        .filter(|x| {
+    let mut filtered_recipients = futures_util::stream::iter(recipients)
+        .map(|x| {
             let client = client.clone();
             let addr = x.clone();
             async move {
-                client
+                let state_exists = client
                     .get_contract_state(&addr, None)
                     .await
                     .unwrap()
-                    .is_some()
+                    .is_some();
+                (state_exists, addr)
             }
         })
-        .map(|recipient| async {
-            let payload_meta = app_cache
-                .generate_payloads(recipient.clone(), args.depth)
-                .await;
-            SendData::new(
-                payload_meta,
-                Keypair::from_bytes(&keypair.to_bytes()).unwrap(),
-                recipient,
-            )
-        })
         .buffered(100)
-        .collect::<Vec<SendData>>()
-        .await;
+        .filter_map(|(state_exists, addr)| async move {
+            if state_exists {
+                Some(addr)
+            } else {
+                None
+            }
+        });
+
+    let mut payloads = Vec::new();
+    let mut filtered_recipients = std::pin::pin!(filtered_recipients);
+
+    while let Some(recipient) = filtered_recipients.next().await {
+        let payload_meta = app_cache.generate_payloads(recipient.clone(), args.depth);
+        let send_data = SendData::new(
+            payload_meta,
+            Keypair::from_bytes(&keypair.to_bytes()).unwrap(),
+            recipient,
+        );
+        payloads.push(send_data);
+    }
 
     log::info!(
         "Generated {} payloads in {:?}",

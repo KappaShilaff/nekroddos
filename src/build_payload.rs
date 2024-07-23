@@ -1,8 +1,8 @@
-use everscale_rpc_client::RpcClient;
 use nekoton_abi::num_bigint::BigUint;
-use nekoton_abi::{BuildTokenValue, PackAbiPlain};
+use nekoton_abi::{BuildTokenValue, FunctionExt, PackAbiPlain};
+use nekoton_utils::SimpleClock;
 use ton_abi::{Token, TokenValue, Uint};
-use ton_block::MsgAddressInt;
+use ton_block::{AccountStuff, MsgAddressInt};
 
 use crate::abi::{dex_pair, token_root, token_wallet};
 use crate::app_cache::AppCache;
@@ -11,26 +11,25 @@ use crate::models::{
     PayloadGeneratorsData, PayloadInput, PayloadTokens, StepInput, Transfer,
 };
 
-pub async fn build_double_side_payloads_data(
+pub fn build_double_side_payloads_data(
     mut input: PayloadInput,
     app_cache: &AppCache,
 ) -> PayloadGeneratorsData {
-    let forward_route =
-        build_route_data(input.recipient.clone(), input.steps.clone(), app_cache).await;
+    let forward_route = build_route_data(input.recipient.clone(), input.steps.clone(), app_cache);
 
     input.steps.reverse();
     input.steps.iter_mut().for_each(|x| {
         std::mem::swap(&mut x.from_currency_address, &mut x.to_currency_address);
     });
 
-    let backward_route = build_route_data(input.recipient, input.steps, app_cache).await;
+    let backward_route = build_route_data(input.recipient, input.steps, app_cache);
     PayloadGeneratorsData {
         forward: forward_route,
         backward: backward_route,
     }
 }
 
-async fn build_route_data(
+fn build_route_data(
     recipient: MsgAddressInt,
     mut steps: Vec<StepInput>,
     app_cache: &AppCache,
@@ -79,8 +78,12 @@ async fn build_route_data(
     }
     .pack();
 
-    let destination =
-        get_wallet_of(&app_cache.tx, &first_pool.from_currency_address, recipient).await;
+    let state = app_cache
+        .tokens_states
+        .get(&first_pool.from_currency_address)
+        .cloned()
+        .unwrap();
+    let destination = get_wallet_of(state, &first_pool.from_currency_address, recipient);
 
     PayloadGenerator {
         first_pool_state: app_cache
@@ -101,15 +104,17 @@ async fn build_route_data(
     }
 }
 
-async fn get_wallet_of(
-    tx: &RpcClient,
+fn get_wallet_of(
+    state: AccountStuff,
     from_token_root: &MsgAddressInt,
     recipient: MsgAddressInt,
 ) -> MsgAddressInt {
-    let res = tx
+    let res = token_root()
+        .function("walletOf")
+        .unwrap()
         .run_local(
-            from_token_root,
-            token_root().function("walletOf").unwrap(),
+            &SimpleClock,
+            state,
             &[
                 Token::new(
                     "answerId",
@@ -121,8 +126,6 @@ async fn get_wallet_of(
                 Token::new("walletOwner", recipient.clone().token_value()),
             ],
         )
-        .await
-        .unwrap()
         .unwrap()
         .tokens
         .and_then(|x| x.into_iter().next())

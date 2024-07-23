@@ -1,12 +1,15 @@
-use std::collections::{HashMap, HashSet};
-
 use everscale_rpc_client::RpcClient;
 use futures_util::stream::FuturesUnordered;
 use futures_util::StreamExt;
+use indexmap::IndexSet;
 use nekoton::utils::SimpleClock;
 use nekoton_abi::{FunctionExt, UnpackAbiPlain};
-use rand::prelude::SliceRandom;
+use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
+use rand::{random, SeedableRng};
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::AtomicUsize;
+use std::sync::{Arc, Mutex};
 use ton_block::{AccountStuff, MsgAddressInt};
 
 use crate::abi::dex_pair;
@@ -23,18 +26,27 @@ fn build_answer_id_camel() -> ton_abi::Token {
 #[derive(Clone)]
 pub struct AppCache {
     pub pool_states: HashMap<MsgAddressInt, AccountStuff>,
+    pub tokens_states: HashMap<MsgAddressInt, AccountStuff>,
     pub token_pairs: HashMap<(MsgAddressInt, MsgAddressInt), MsgAddressInt>,
     pub tokens: Vec<MsgAddressInt>,
     pub tx: RpcClient,
+    token_index: Arc<AtomicUsize>,
+    rng: Arc<Mutex<StdRng>>,
 }
 
 impl AppCache {
-    pub fn new(tx: RpcClient) -> Self {
+    pub fn new(tx: RpcClient, seed: Option<u64>) -> Self {
+        let seed = seed.unwrap_or_else(random);
+        log::info!("Using seed {seed}");
+
         Self {
             pool_states: HashMap::new(),
+            tokens_states: Default::default(),
             token_pairs: HashMap::new(),
             tokens: Vec::new(),
             tx,
+            token_index: Arc::new(AtomicUsize::new(0)),
+            rng: Arc::new(Mutex::new(StdRng::seed_from_u64(seed))),
         }
     }
 
@@ -53,6 +65,7 @@ impl AppCache {
             .filter_map(|x| async move { x })
             .collect()
             .await;
+
         log::info!(
             "Loaded {} states in {:?}",
             self.pool_states.len(),
@@ -62,7 +75,7 @@ impl AppCache {
         self
     }
 
-    pub fn load_tokens_and_token_pairs(mut self) -> Self {
+    pub async fn load_tokens_and_token_pairs(mut self) -> Self {
         let start = std::time::Instant::now();
         let mut token_pairs = HashMap::new();
         let mut tokens = HashSet::new();
@@ -84,6 +97,21 @@ impl AppCache {
 
         self.token_pairs = token_pairs;
         self.tokens = tokens.into_iter().collect();
+        self.tokens.sort();
+
+        let tx = &self.tx;
+        let futures = self.tokens.iter().map(|address| async move {
+            tx.get_contract_state(address, None)
+                .await
+                .ok()
+                .flatten()
+                .map(|account| (address.clone(), account.account))
+        });
+        self.tokens_states = FuturesUnordered::from_iter(futures)
+            .filter_map(|x| async move { x })
+            .collect()
+            .await;
+
         log::info!(
             "Loaded {} tokens and {} token pairs in {:?}",
             self.tokens.len(),
@@ -94,8 +122,16 @@ impl AppCache {
         self
     }
 
-    pub async fn generate_payloads(&self, recipient: MsgAddressInt, steps_len: u8) -> PayloadGeneratorsData {
-        let route = self.generate_route(steps_len);
+    pub fn generate_payloads(
+        &self,
+        recipient: MsgAddressInt,
+        steps_len: u8,
+    ) -> PayloadGeneratorsData {
+        let index = self
+            .token_index
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            % self.tokens.len();
+        let route = self.generate_route(steps_len, index);
         build_double_side_payloads_data(
             PayloadInput {
                 steps: route,
@@ -103,23 +139,25 @@ impl AppCache {
             },
             self,
         )
-        .await
     }
 
-    fn generate_route(&self, steps_len: u8) -> Vec<StepInput> {
+    fn generate_route(&self, steps_len: u8, starting_with: usize) -> Vec<StepInput> {
         let mut res = vec![];
         let mut exists_tokens = HashSet::new();
-        let mut rng = rand::thread_rng();
 
-        let mut from_token = self.tokens.choose(&mut rng).cloned().unwrap();
+        let mut from_token = self.tokens.get(starting_with).cloned().unwrap();
         exists_tokens.insert(from_token.clone());
 
         for _ in 0..steps_len {
-            let mut temp_tokens: HashSet<_> = self.tokens.clone().into_iter().collect();
+            let mut temp_tokens: IndexSet<MsgAddressInt> =
+                IndexSet::from_iter(self.tokens.iter().cloned());
             loop {
-                let to_token = temp_tokens.iter().choose(&mut rng).cloned().unwrap();
+                let mut rng = self.rng.lock().unwrap();
+                let to_token = temp_tokens.iter().choose(&mut *rng).cloned().unwrap();
+                drop(rng);
+
                 if exists_tokens.contains(&to_token) {
-                    temp_tokens.remove(&to_token);
+                    temp_tokens.shift_remove(&to_token);
                     continue;
                 }
 
@@ -134,7 +172,7 @@ impl AppCache {
                 {
                     (to_token.clone(), from_token.clone(), pool_address.clone())
                 } else {
-                    temp_tokens.remove(&to_token);
+                    temp_tokens.shift_remove(&to_token);
                     continue;
                 };
 
