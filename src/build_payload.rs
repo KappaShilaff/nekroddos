@@ -1,15 +1,21 @@
-use nekoton_abi::num_bigint::BigUint;
-use nekoton_abi::{BuildTokenValue, FunctionExt, PackAbiPlain};
-use nekoton_utils::SimpleClock;
-use ton_abi::{Token, TokenValue, Uint};
-use ton_block::{AccountStuff, MsgAddressInt};
-
-use crate::abi::{dex_pair, token_root, token_wallet};
+use crate::abi::{dex_pair, receiver, token_root, token_wallet};
 use crate::app_cache::AppCache;
 use crate::models::{
     DexPairV9BuildCrossPairExchangePayloadV2, DexPairV9Steps, PayloadGenerator,
     PayloadGeneratorsData, PayloadInput, PayloadTokens, StepInput, Transfer,
 };
+use nekoton_abi::num_bigint::BigUint;
+use nekoton_abi::{
+    BuildTokenValue, FunctionExt, KnownParamTypePlain, PackAbiPlain, UnpackAbiPlain,
+};
+use nekoton_utils::SimpleClock;
+use rand::{RngCore, SeedableRng};
+use std::collections::HashMap;
+use std::sync::OnceLock;
+use ton_abi::contract::ABI_VERSION_2_3;
+use ton_abi::{Token, TokenValue, Uint};
+use ton_block::{AccountStuff, MsgAddressInt};
+use ton_types::Cell;
 
 pub fn build_double_side_payloads_data(
     mut input: PayloadInput,
@@ -66,7 +72,7 @@ fn build_route_data(
         success_payload: None,
         cancel_payload: None,
     }
-    .pack();
+        .pack();
 
     let transfer_tokens = Transfer {
         amount: 100_000, // todo! conf
@@ -76,7 +82,7 @@ fn build_route_data(
         notify: true,
         payload: Default::default(),
     }
-    .pack();
+        .pack();
 
     let state = app_cache
         .tokens_states
@@ -139,4 +145,85 @@ fn get_wallet_of(
     };
 
     wallet_token.clone().to_msg_addr_int().unwrap()
+}
+
+#[derive(Debug, Clone, PackAbiPlain, KnownParamTypePlain)]
+pub struct FillFunctionInput {
+    #[abi(uint32)]
+    pub number: u32,
+    #[abi(cell)]
+    pub cell: Cell,
+}
+
+pub fn get_dag_payload(
+    index: u32,
+    data_size: u32,
+    seed: Option<u64>,
+    dst: MsgAddressInt,
+) -> ton_block::Message {
+    static PAYLOAD: OnceLock<Cell> = OnceLock::new();
+    let data = PAYLOAD.get_or_init(|| {
+        let seed = seed.unwrap_or_else(rand::random);
+        let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+        let mut data = vec![0_u8; data_size as usize];
+        rng.fill_bytes(&mut data);
+
+        let data = data
+            .token_value()
+            .pack_into_chain(&ABI_VERSION_2_3)
+            .unwrap();
+        data.into_cell().unwrap()
+    });
+
+    let abi = receiver();
+    let method = abi.function("fill").unwrap();
+    let tokens = FillFunctionInput {
+        number: index,
+        cell: data.clone(),
+    }
+        .pack();
+
+    let time = chrono::Utc::now().timestamp_millis() as u64;
+
+    let mut header = HashMap::with_capacity(1);
+    header.insert("time".to_string(), TokenValue::Time(time));
+
+    let body = method
+        .encode_input(&header, &tokens, false, None, None)
+        .unwrap();
+
+    ton_block::Message::with_ext_in_header_and_body(
+        ton_block::ExternalInboundMessageHeader {
+            dst,
+            ..Default::default()
+        },
+        ton_types::SliceData::load_builder(body).unwrap(),
+    )
+}
+
+#[derive(Debug, Clone, UnpackAbiPlain, KnownParamTypePlain, Default)]
+pub struct StatsFunctionOutput {
+    #[abi(uint32)]
+    pub errors_count: u32,
+    #[abi(uint32)]
+    pub success_count: u32,
+}
+
+pub fn get_stats(state: AccountStuff) -> StatsFunctionOutput {
+    let abi = receiver();
+    let method = abi.function("stats").unwrap();
+    let res = method
+        .run_local(
+            &SimpleClock,
+            state,
+            &[Token::new(
+                "answerId",
+                TokenValue::Uint(Uint {
+                    number: BigUint::from(0_u32),
+                    size: 32,
+                }),
+            )],
+        )
+        .unwrap();
+    res.tokens.unwrap().unpack().unwrap()
 }

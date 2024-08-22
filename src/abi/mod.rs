@@ -24,4 +24,6 @@ declare_abi! {
     dex_pair => "DexPair.abi.json",
     token_wallet => "TokenWallet.abi.json",
     token_root => "TokenRoot.abi.json",
+    receiver => "Receiver.abi.json",
+    dudos_factory => "dudos-factory.json"
 }
