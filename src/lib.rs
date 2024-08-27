@@ -26,7 +26,7 @@ struct Args {
     project_root: PathBuf,
 
     #[clap(short, long)]
-    endpoint: Url,
+    endpoints: Vec<Url>,
 
     /// seed for rng
     /// if you want to run multiple instances of the script with the same seed
@@ -52,13 +52,14 @@ pub async fn run_test() -> Result<()> {
         nekoton::crypto::derive_from_phrase(&seed, nekoton::crypto::MnemonicType::Labs(0))
             .context("Failed to derive keypair")?;
     let client = RpcClient::new(
-        vec![app_args.endpoint.clone()],
+        app_args.endpoints.clone(),
         ClientOptions {
-            request_timeout: Duration::from_secs(60),
+            request_timeout: Duration::from_secs(1),
+            choose_strategy: everscale_rpc_client::ChooseStrategy::RoundRobin,
             ..Default::default()
         },
     )
-    .await?;
+        .await?;
 
     match &app_args.command {
         Commands::Swap(args) => {
