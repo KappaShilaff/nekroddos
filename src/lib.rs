@@ -54,7 +54,7 @@ pub async fn run_test() -> Result<()> {
     let client = RpcClient::new(
         app_args.endpoints.clone(),
         ClientOptions {
-            request_timeout: Duration::from_secs(1),
+            request_timeout: Duration::from_secs(60),
             choose_strategy: everscale_rpc_client::ChooseStrategy::RoundRobin,
             ..Default::default()
         },
