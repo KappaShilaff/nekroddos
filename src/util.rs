@@ -7,6 +7,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Barrier;
+use tokio::task::JoinHandle;
 
 #[derive(Clone)]
 pub struct TestEnv {
@@ -44,7 +45,7 @@ impl TestEnv {
         }
     }
 
-    pub fn spawn_progress_printer(&self) {
+    pub fn spawn_progress_printer(&self) -> JoinHandle<()> {
         let counter = self.counter.clone();
         tokio::spawn(async move {
             let start = std::time::Instant::now();
@@ -56,6 +57,11 @@ impl TestEnv {
                     start.elapsed().as_secs()
                 );
             }
-        });
+        })
+    }
+
+    pub fn set_counter(&self, value: u64) {
+        self.counter
+            .store(value, std::sync::atomic::Ordering::Relaxed);
     }
 }

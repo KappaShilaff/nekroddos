@@ -72,7 +72,7 @@ fn build_route_data(
         success_payload: None,
         cancel_payload: None,
     }
-        .pack();
+    .pack();
 
     let transfer_tokens = Transfer {
         amount: 100_000, // todo! conf
@@ -82,7 +82,7 @@ fn build_route_data(
         notify: true,
         payload: Default::default(),
     }
-        .pack();
+    .pack();
 
     let state = app_cache
         .tokens_states
@@ -181,7 +181,7 @@ pub fn get_dag_payload(
         number: index,
         cell: data.clone(),
     }
-        .pack();
+    .pack();
 
     let time = chrono::Utc::now().timestamp_millis() as u64;
 
@@ -212,18 +212,6 @@ pub struct StatsFunctionOutput {
 pub fn get_stats(state: AccountStuff) -> StatsFunctionOutput {
     let abi = receiver();
     let method = abi.function("stats").unwrap();
-    let res = method
-        .run_local(
-            &SimpleClock,
-            state,
-            &[Token::new(
-                "answerId",
-                TokenValue::Uint(Uint {
-                    number: BigUint::from(0_u32),
-                    size: 32,
-                }),
-            )],
-        )
-        .unwrap();
+    let res = method.run_local(&SimpleClock, state, &[]).unwrap();
     res.tokens.unwrap().unpack().unwrap()
 }

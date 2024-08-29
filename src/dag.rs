@@ -27,6 +27,9 @@ pub struct DagTestArgs {
 
     #[clap(short, long)]
     payload_size: u32,
+
+    #[clap(long, default_value = "false")]
+    only_stats: bool,
 }
 pub async fn run(swap_args: DagTestArgs, common_args: Args, client: RpcClient) -> Result<()> {
     let deployments_path = common_args.project_root.join("deployments");
@@ -62,7 +65,6 @@ async fn spawn_ddos_jobs(
     recievers: Vec<MsgAddressInt>,
     common_args: Args,
 ) -> Result<()> {
-    log::info!("Spawning ddos jobs for {} recievers", recievers.len());
     let test_env = TestEnv::new(
         args.num_iterations,
         args.rps,
@@ -71,14 +73,30 @@ async fn spawn_ddos_jobs(
         common_args.seed,
     );
 
+    if args.only_stats {
+        test_env.set_counter(args.num_iterations as u64 * recievers.len() as u64);
+        print_stats(recievers, &test_env).await;
+        return Ok(());
+    }
+
+    log::info!("Spawning ddos jobs for {} recievers", recievers.len());
+
     for reciever in recievers.clone() {
         let env = test_env.clone();
         tokio::spawn(ddos_job(env, reciever, args.payload_size));
     }
     log::info!("All jobs spawned");
 
-    test_env.spawn_progress_printer();
+    let handle = test_env.spawn_progress_printer();
     test_env.barrier.wait().await;
+    handle.abort();
+
+    print_stats(recievers, &test_env).await;
+
+    Ok(())
+}
+
+async fn print_stats(recievers: Vec<MsgAddressInt>, test_env: &TestEnv) {
     let states: Vec<Result<ExistingContract>> = futures_util::stream::iter(recievers)
         .map(|reciever| {
             let client = test_env.client.clone();
@@ -103,19 +121,23 @@ async fn spawn_ddos_jobs(
             acc
         });
 
-    log::info!(
-        "Total: {}, Success: {}, Failed: {}",
-        stats.total,
-        stats.success,
-        stats.failed
-    );
-
-    Ok(())
+    for _ in 0..10 {
+        log::info!(
+            "Total: {}, Success: {}, Failed: {}, Percent failed: {:.2}%, Number non delivered: {}, Percent non delivered: {:.2}%",
+            stats.total,
+            stats.success,
+            stats.failed,
+            stats.failed as f64 / stats.total as f64 * 100.0,
+            stats.total - stats.success - stats.failed,
+            (stats.total - stats.success - stats.failed) as f64 / stats.total as f64 * 100.0
+        );
+        tokio::time::sleep(Duration::from_secs(10)).await;
+    }
 }
 
 async fn ddos_job(test_env: TestEnv, reciever: MsgAddressInt, payload_size: u32) -> Result<()> {
     let jitter = Jitter::new(Duration::from_millis(1), Duration::from_millis(50));
-    for i in 0..test_env.num_iterations {
+    for i in 1..=test_env.num_iterations {
         let payload = get_dag_payload(i, payload_size, test_env.seed, reciever.clone());
         test_env.rate_limiter.until_ready_with_jitter(jitter).await;
         test_env.client.broadcast_message(payload).await?;
