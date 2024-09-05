@@ -183,13 +183,8 @@ pub fn get_dag_payload(
     }
     .pack();
 
-    let time = chrono::Utc::now().timestamp_millis() as u64;
-
-    let mut header = HashMap::with_capacity(1);
-    header.insert("time".to_string(), TokenValue::Time(time));
-
     let body = method
-        .encode_input(&header, &tokens, false, None, None)
+        .encode_input(&HashMap::new(), &tokens, false, None, None)
         .unwrap();
 
     ton_block::Message::with_ext_in_header_and_body(
