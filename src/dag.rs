@@ -71,6 +71,7 @@ async fn spawn_ddos_jobs(
         args.total_wallets as usize,
         client,
         common_args.seed,
+        common_args.clone(),
     );
 
     if args.only_stats {
@@ -140,10 +141,20 @@ async fn ddos_job(test_env: TestEnv, reciever: MsgAddressInt, payload_size: u32)
     for i in 1..=test_env.num_iterations {
         let payload = get_dag_payload(i, payload_size, test_env.seed, reciever.clone());
         test_env.rate_limiter.until_ready_with_jitter(jitter).await;
-        test_env.client.broadcast_message(payload).await?;
-        test_env
-            .counter
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let h = {
+            let client = test_env.client.clone();
+            let counter = test_env.counter.clone();
+            tokio::spawn(async move {
+                if let Err(e) = client.broadcast_message(payload).await {
+                    log::error!("Failed to send: {:?}", e);
+                    return;
+                }
+                counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            })
+        };
+        if !test_env.args.no_wait {
+            h.await?;
+        }
     }
 
     test_env.barrier.wait().await;

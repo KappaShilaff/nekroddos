@@ -18,7 +18,7 @@ mod dag;
 mod swap;
 mod util;
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 struct Args {
     #[command(subcommand)]
     command: Commands,
@@ -32,9 +32,13 @@ struct Args {
     /// if you want to run multiple instances of the script with the same seed
     #[clap(short, long)]
     seed: Option<u64>,
+
+    /// do not fait for the node answer on send message
+    #[clap(short, long)]
+    no_wait: bool,
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Clone)]
 enum Commands {
     Swap(SwapTestArgs),
     Dag(DagTestArgs),
@@ -59,7 +63,7 @@ pub async fn run_test() -> Result<()> {
             ..Default::default()
         },
     )
-        .await?;
+    .await?;
 
     match &app_args.command {
         Commands::Swap(args) => {

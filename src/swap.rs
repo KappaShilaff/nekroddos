@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -124,6 +125,7 @@ pub async fn run(
         payloads.len(),
         client,
         common_args.seed,
+        common_args.clone(),
     );
 
     for payload in payloads {
@@ -152,6 +154,7 @@ async fn process_payload(mut send_data: SendData, test_env: TestEnv) {
         .await
         .unwrap()
         .unwrap();
+    let account = Arc::new(state.account);
 
     let mut generator = load_generator(send_data.payload_generators.clone());
     let jitter = Jitter::new(Duration::from_millis(1), Duration::from_millis(50));
@@ -159,10 +162,11 @@ async fn process_payload(mut send_data: SendData, test_env: TestEnv) {
         if let Err(e) = send_forward_and_backward(
             &client,
             &mut send_data,
-            &state.account,
+            account.clone(),
             &rl,
             jitter,
             &mut generator,
+            &test_env.args,
         )
         .await
         {
@@ -178,36 +182,74 @@ async fn process_payload(mut send_data: SendData, test_env: TestEnv) {
 async fn send_forward_and_backward(
     client: &RpcClient,
     payload: &mut SendData,
-    state: &AccountStuff,
+    state: Arc<AccountStuff>,
     rl: &RateLimiter<NotKeyed, InMemoryState, DefaultClock>,
     jitter: Jitter,
     generator: &mut tokio::sync::mpsc::Receiver<(PayloadMeta, PayloadMeta)>,
+    app_args: &Args,
 ) -> Result<()> {
     let (forward_meta, backward_meta) = generator.recv().await.unwrap();
 
-    rl.until_ready_with_jitter(jitter).await;
-    send::send(
-        client,
-        &payload.signer,
-        payload.sender_addr.clone(),
-        forward_meta.payload.clone(),
-        forward_meta.destination.clone(),
-        3_000_000_000,
-        None,
-        state,
+    async fn send_transaction(
+        client: RpcClient,
+        payload: SendData,
+        meta: PayloadMeta,
+        state: Arc<AccountStuff>,
+    ) -> Result<()> {
+        send::send(
+            &client,
+            &payload.signer,
+            payload.sender_addr.clone(),
+            meta.payload,
+            meta.destination,
+            3_000_000_000,
+            None,
+            &state,
+        )
+        .await
+    }
+
+    async fn process_transaction(
+        client: RpcClient,
+        payload: SendData,
+        meta: PayloadMeta,
+        state: Arc<AccountStuff>,
+        rl: &RateLimiter<NotKeyed, InMemoryState, DefaultClock>,
+        jitter: Jitter,
+        no_wait: bool,
+    ) -> Result<()> {
+        rl.until_ready_with_jitter(jitter).await;
+        let handle =
+            tokio::spawn(async move { send_transaction(client, payload, meta, state).await });
+
+        if !no_wait {
+            handle.await??;
+        }
+
+        Ok(())
+    }
+
+    // Process forward transaction
+    process_transaction(
+        client.clone(),
+        payload.clone(),
+        forward_meta,
+        state.clone(),
+        rl,
+        jitter,
+        app_args.no_wait,
     )
     .await?;
 
-    rl.until_ready_with_jitter(jitter).await;
-    send::send(
-        client,
-        &payload.signer,
-        payload.sender_addr.clone(),
-        backward_meta.payload.clone(),
-        backward_meta.destination.clone(),
-        3_000_000_000,
-        None,
+    // Process backward transaction
+    process_transaction(
+        client.clone(),
+        payload.clone(),
+        backward_meta,
         state,
+        rl,
+        jitter,
+        app_args.no_wait,
     )
     .await?;
 
@@ -215,11 +257,11 @@ async fn send_forward_and_backward(
 }
 
 fn load_generator(
-    generator: PayloadGeneratorsData,
+    mut generator: Arc<PayloadGeneratorsData>,
 ) -> tokio::sync::mpsc::Receiver<(PayloadMeta, PayloadMeta)> {
     let (tx, rx) = tokio::sync::mpsc::channel(100);
     tokio::spawn(async move {
-        let mut generator = generator;
+        let generator = Arc::make_mut(&mut generator);
         loop {
             let forward = generator.forward.generate_payload_meta();
             let backward = generator.backward.generate_payload_meta();

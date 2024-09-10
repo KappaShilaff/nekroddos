@@ -1,3 +1,4 @@
+use crate::Args;
 use everscale_rpc_client::RpcClient;
 use governor::clock::DefaultClock;
 use governor::state::{InMemoryState, NotKeyed};
@@ -17,6 +18,7 @@ pub struct TestEnv {
     pub counter: Arc<AtomicU64>,
     pub client: RpcClient,
     pub seed: Option<u64>,
+    pub args: Args,
 }
 
 impl TestEnv {
@@ -26,6 +28,7 @@ impl TestEnv {
         num_wallets: usize,
         client: RpcClient,
         seed: Option<u64>,
+        args: Args,
     ) -> Self {
         let barrier = Barrier::new(num_wallets + 1);
         let barrier = Arc::new(barrier);
@@ -42,6 +45,7 @@ impl TestEnv {
             counter,
             client,
             seed,
+            args,
         }
     }
 

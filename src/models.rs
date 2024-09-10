@@ -3,6 +3,7 @@ use ed25519_dalek::Keypair;
 use nekoton_abi::{BuildTokenValue, FunctionExt, PackAbi, PackAbiPlain, UnpackAbiPlain};
 use nekoton_utils::{serde_address, SimpleClock};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use ton_abi::{Function, Token, TokenValue, Uint};
 use ton_block::{AccountStuff, MsgAddressInt};
 use ton_types::{BuilderData, Cell};
@@ -115,9 +116,10 @@ pub struct PayloadMeta {
     pub destination: MsgAddressInt,
 }
 
+#[derive(Clone)]
 pub struct SendData {
-    pub payload_generators: PayloadGeneratorsData,
-    pub signer: Keypair,
+    pub payload_generators: Arc<PayloadGeneratorsData>,
+    pub signer: Arc<Keypair>,
     pub sender_addr: MsgAddressInt,
 }
 
@@ -128,8 +130,8 @@ impl SendData {
         sender_addr: MsgAddressInt,
     ) -> Self {
         Self {
-            payload_generators,
-            signer,
+            payload_generators: Arc::new(payload_generators),
+            signer: Arc::new(signer),
             sender_addr,
         }
     }
