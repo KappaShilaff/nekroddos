@@ -1,0 +1,109 @@
+{
+  "ABI version": 2,
+  "version": "2.3",
+  "header": [
+    "time",
+    "expire"
+  ],
+  "functions": [
+    {
+      "name": "constructor",
+      "inputs": [
+        {
+          "name": "_everWalletCode",
+          "type": "cell"
+        }
+      ],
+      "outputs": [
+      ]
+    },
+    {
+      "name": "batchEverWalletDeploy",
+      "inputs": [
+        {
+          "name": "_index",
+          "type": "uint64"
+        },
+        {
+          "name": "_balance",
+          "type": "uint128"
+        },
+        {
+          "name": "_publicKey",
+          "type": "uint256"
+        },
+        {
+          "name": "_count",
+          "type": "uint64"
+        }
+      ],
+      "outputs": [
+      ]
+    },
+    {
+      "name": "get_wallet",
+      "inputs": [
+        {
+          "name": "_index",
+          "type": "uint64"
+        },
+        {
+          "name": "_publicKey",
+          "type": "uint256"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "receiver",
+          "type": "address"
+        }
+      ]
+    },
+    {
+      "name": "get_deployed",
+      "inputs": [
+      ],
+      "outputs": [
+        {
+          "name": "deployed",
+          "type": "uint64"
+        }
+      ]
+    }
+  ],
+  "data": [
+    {
+      "key": 1,
+      "name": "_nonce",
+      "type": "uint64"
+    }
+  ],
+  "events": [
+  ],
+  "fields": [
+    {
+      "name": "_pubkey",
+      "type": "uint256"
+    },
+    {
+      "name": "_timestamp",
+      "type": "uint64"
+    },
+    {
+      "name": "_constructorFlag",
+      "type": "bool"
+    },
+    {
+      "name": "_nonce",
+      "type": "uint64"
+    },
+    {
+      "name": "everWalletCode",
+      "type": "cell"
+    },
+    {
+      "name": "deployed_count",
+      "type": "uint64"
+    }
+  ]
+}

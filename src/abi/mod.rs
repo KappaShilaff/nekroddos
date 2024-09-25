@@ -25,5 +25,6 @@ declare_abi! {
     token_wallet => "TokenWallet.abi.json",
     token_root => "TokenRoot.abi.json",
     receiver => "Receiver.abi.json",
-    dudos_factory => "dudos-factory.json"
+    dudos_factory => "dudos-factory.json",
+    wallet_factory => "WalletFactory.json"
 }

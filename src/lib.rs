@@ -1,7 +1,9 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::dag::DagTestArgs;
+use crate::send_tokens::SendTestArgs;
 use crate::swap::SwapTestArgs;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
@@ -15,6 +17,7 @@ mod models;
 mod send;
 
 mod dag;
+mod send_tokens;
 mod swap;
 mod util;
 
@@ -42,6 +45,7 @@ struct Args {
 enum Commands {
     Swap(SwapTestArgs),
     Dag(DagTestArgs),
+    Send(SendTestArgs),
 }
 
 pub async fn run_test() -> Result<()> {
@@ -55,6 +59,7 @@ pub async fn run_test() -> Result<()> {
     let keypair =
         nekoton::crypto::derive_from_phrase(&seed, nekoton::crypto::MnemonicType::Labs(0))
             .context("Failed to derive keypair")?;
+    let keypair = Arc::new(keypair);
     let client = RpcClient::new(
         app_args.endpoints.clone(),
         ClientOptions {
@@ -71,6 +76,9 @@ pub async fn run_test() -> Result<()> {
         }
         Commands::Dag(args) => {
             dag::run(args.clone(), app_args, client).await?;
+        }
+        Commands::Send(args) => {
+            send_tokens::run(args.clone(), app_args, keypair, client).await?;
         }
     }
 

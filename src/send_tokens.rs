@@ -1,0 +1,209 @@
+use crate::abi::wallet_factory;
+use crate::models::GenericDeploymentInfo;
+use crate::util::TestEnv;
+use crate::{send, Args};
+use anyhow::{Context, Result};
+use clap::Parser;
+use ed25519_dalek::Keypair;
+use everscale_rpc_client::RpcClient;
+use futures_util::StreamExt;
+use governor::Jitter;
+use nekoton_abi::{FunctionExt, KnownParamTypePlain, PackAbi, PackAbiPlain, UnpackAbiPlain};
+use nekoton_utils::SimpleClock;
+use rand::prelude::{SliceRandom, StdRng};
+use rand::{Rng, SeedableRng};
+use std::sync::Arc;
+use std::time::Duration;
+use ton_block::MsgAddressInt;
+use ton_types::{BuilderData, UInt256};
+
+#[derive(Parser, Debug, Clone)]
+pub struct SendTestArgs {
+    #[clap(short, long)]
+    total_wallets: u32,
+    #[clap(short, long)]
+    rps: u32,
+    #[clap(short, long)]
+    num_iterations: u32,
+
+    #[clap(long, default_value = "false")]
+    only_stats: bool,
+}
+pub async fn run(
+    swap_args: SendTestArgs,
+    common_args: Args,
+    key_pair: Arc<Keypair>,
+    client: RpcClient,
+) -> Result<()> {
+    let deployments_path = common_args.project_root.join("deployments");
+    log::info!("Deployments path: {:?}", deployments_path);
+
+    let factory_abi = walkdir::WalkDir::new(&deployments_path)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .filter(|e| e.path().extension().map(|e| e == "json").unwrap_or(false))
+        .find(|e| {
+            e.path()
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n.to_lowercase().contains("factory"))
+                .unwrap_or(false)
+        })
+        .context("No factory abi")?;
+    let factory: GenericDeploymentInfo =
+        serde_json::from_slice(&std::fs::read(factory_abi.path())?)?;
+    let mut recievers = get_wallets(
+        client.clone(),
+        &factory.address,
+        swap_args.total_wallets,
+        key_pair.public.to_bytes(),
+    )
+    .await
+    .context("Failed to get wallets")?;
+    recievers.sort();
+
+    spawn_ddos_jobs(&swap_args, client, recievers, common_args, key_pair).await?;
+
+    Ok(())
+}
+
+async fn spawn_ddos_jobs(
+    args: &SendTestArgs,
+    client: RpcClient,
+    recievers: Vec<MsgAddressInt>,
+    common_args: Args,
+    key_pair: Arc<Keypair>,
+) -> Result<()> {
+    let test_env = TestEnv::new(
+        args.num_iterations,
+        args.rps,
+        args.total_wallets as usize,
+        client,
+        common_args.seed,
+        common_args.clone(),
+    );
+
+    if args.only_stats {
+        test_env.set_counter(args.num_iterations as u64 * recievers.len() as u64);
+        // print_stats(recievers, &test_env).await;
+        return Ok(());
+    }
+
+    log::info!("Spawning ddos jobs for {} recievers", recievers.len());
+    let receivers = Arc::new(recievers);
+
+    let mut rng = StdRng::seed_from_u64(test_env.seed.unwrap_or_else(rand::random));
+    for receiver in receivers.iter() {
+        let seed = rng.gen();
+        let rng = StdRng::seed_from_u64(seed); // Each job should have its own rng
+        let env = test_env.clone();
+        let receivers = receivers.clone();
+        let key_pair = key_pair.clone();
+        tokio::spawn(ddos_job(env, receiver.clone(), receivers, key_pair, rng));
+    }
+    log::info!("All jobs spawned");
+
+    let handle = test_env.spawn_progress_printer();
+    test_env.barrier.wait().await;
+    handle.abort();
+
+    Ok(())
+}
+
+async fn ddos_job(
+    test_env: TestEnv,
+    from: MsgAddressInt,
+    wallets: Arc<Vec<MsgAddressInt>>,
+    signer: Arc<Keypair>,
+    mut rng: StdRng,
+) -> Result<()> {
+    let jitter = Jitter::new(Duration::from_millis(1), Duration::from_millis(50));
+    let state = test_env
+        .client
+        .get_contract_state(&from, None)
+        .await?
+        .expect(format!("No state for {}", from).as_str())
+        .account;
+
+    for _ in 1..=test_env.num_iterations {
+        let rand_dst = wallets.choose(&mut rng).unwrap().clone();
+
+        test_env.rate_limiter.until_ready_with_jitter(jitter).await;
+        let h = {
+            let client = test_env.client.clone();
+            let counter = test_env.counter.clone();
+            let signer = signer.clone();
+            let from = from.clone();
+            let state = state.clone();
+
+            tokio::spawn(async move {
+                send::send(
+                    &client,
+                    &signer,
+                    from,
+                    BuilderData::new(),
+                    rand_dst,
+                    1_000_000,
+                    None,
+                    &state,
+                )
+                .await
+                .unwrap();
+                counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            })
+        };
+        if !test_env.args.no_wait {
+            h.await?;
+        }
+    }
+
+    test_env.barrier.wait().await;
+    Ok(())
+}
+
+async fn get_wallets(
+    client: RpcClient,
+    factory: &MsgAddressInt,
+    num_wallets: u32,
+    pubkey: [u8; 32],
+) -> Result<Vec<MsgAddressInt>> {
+    let method = get_wallet();
+    let state = client
+        .get_contract_state(factory, None)
+        .await?
+        .context("No state")?;
+
+    let mut recipients = Vec::new();
+    for i in 0..num_wallets {
+        let tokens = GetWalletFunctionInput {
+            index: i as _,
+            public_key: UInt256::from(pubkey),
+        }
+        .pack();
+        let result = method.run_local(&SimpleClock, state.account.clone(), &tokens)?;
+        let tokens = result.tokens.context("No tokens")?;
+        let addr: GetWalletFunctionOutput = tokens.unpack()?;
+        recipients.push(addr.receiver);
+    }
+
+    Ok(recipients)
+}
+
+#[derive(Debug, Clone, PackAbiPlain, UnpackAbiPlain, KnownParamTypePlain)]
+pub struct GetWalletFunctionInput {
+    #[abi(name = "_index", uint64)]
+    pub index: u64,
+    #[abi(name = "_publicKey", uint256)]
+    pub public_key: ton_types::UInt256,
+}
+
+#[derive(Debug, Clone, PackAbi, UnpackAbiPlain, KnownParamTypePlain)]
+pub struct GetWalletFunctionOutput {
+    #[abi(address)]
+    pub receiver: ton_block::MsgAddressInt,
+}
+
+pub fn get_wallet() -> &'static ton_abi::Function {
+    wallet_factory().function("get_wallet").unwrap()
+}
