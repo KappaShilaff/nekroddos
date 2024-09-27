@@ -611,7 +611,7 @@ dependencies = [
 [[package]]
 name = "everscale-rpc-client"
 version = "0.6.1"
-source = "git+https://github.com/broxus/everscale-jrpc#c8a19c0965699f069d94c48e6b8c511830705359"
+source = "git+https://github.com/broxus/everscale-jrpc#f84b6fd113311263fe8abb8efe51a7d0dc566b59"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -641,7 +641,7 @@ dependencies = [
 [[package]]
 name = "everscale-rpc-models"
 version = "0.1.0"
-source = "git+https://github.com/broxus/everscale-jrpc#c8a19c0965699f069d94c48e6b8c511830705359"
+source = "git+https://github.com/broxus/everscale-jrpc#f84b6fd113311263fe8abb8efe51a7d0dc566b59"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1285,7 +1285,7 @@ dependencies = [
 [[package]]
 name = "nekoton"
 version = "0.13.1"
-source = "git+https://github.com/broxus/nekoton.git#63e4dfc50fd577b95b44110f717d9d32c2404e83"
+source = "git+https://github.com/broxus/nekoton.git#c933b4632756de787eda244a31ca020ffe4c644a"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1328,7 +1328,7 @@ dependencies = [
 [[package]]
 name = "nekoton-abi"
 version = "0.13.0"
-source = "git+https://github.com/broxus/nekoton.git#63e4dfc50fd577b95b44110f717d9d32c2404e83"
+source = "git+https://github.com/broxus/nekoton.git#c933b4632756de787eda244a31ca020ffe4c644a"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
@@ -1355,7 +1355,7 @@ dependencies = [
 [[package]]
 name = "nekoton-contracts"
 version = "0.13.0"
-source = "git+https://github.com/broxus/nekoton.git#63e4dfc50fd577b95b44110f717d9d32c2404e83"
+source = "git+https://github.com/broxus/nekoton.git#c933b4632756de787eda244a31ca020ffe4c644a"
 dependencies = [
  "anyhow",
  "nekoton-abi",
@@ -1371,7 +1371,7 @@ dependencies = [
 [[package]]
 name = "nekoton-derive"
 version = "0.13.0"
-source = "git+https://github.com/broxus/nekoton.git#63e4dfc50fd577b95b44110f717d9d32c2404e83"
+source = "git+https://github.com/broxus/nekoton.git#c933b4632756de787eda244a31ca020ffe4c644a"
 dependencies = [
  "either",
  "proc-macro2",
@@ -1382,7 +1382,7 @@ dependencies = [
 [[package]]
 name = "nekoton-proto"
 version = "0.1.0"
-source = "git+https://github.com/broxus/nekoton.git#63e4dfc50fd577b95b44110f717d9d32c2404e83"
+source = "git+https://github.com/broxus/nekoton.git#c933b4632756de787eda244a31ca020ffe4c644a"
 dependencies = [
  "anyhow",
  "nekoton-abi",
@@ -1394,7 +1394,7 @@ dependencies = [
 [[package]]
 name = "nekoton-utils"
 version = "0.13.0"
-source = "git+https://github.com/broxus/nekoton.git#63e4dfc50fd577b95b44110f717d9d32c2404e83"
+source = "git+https://github.com/broxus/nekoton.git#c933b4632756de787eda244a31ca020ffe4c644a"
 dependencies = [
  "anyhow",
  "base64 0.13.1",

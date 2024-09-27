@@ -7,7 +7,7 @@ use crate::send_tokens::SendTestArgs;
 use crate::swap::SwapTestArgs;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use everscale_rpc_client::{ClientOptions, RpcClient};
+use everscale_rpc_client::{ClientOptions, ReliabilityParams, RpcClient};
 use url::Url;
 
 mod abi;
@@ -39,6 +39,10 @@ struct Args {
     /// do not fait for the node answer on send message
     #[clap(short, long)]
     no_wait: bool,
+
+    /// Which timediff makes the node dead
+    #[clap(long = "dead-seconds", default_value = "120")]
+    node_is_dead_seconds: u64,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -65,6 +69,11 @@ pub async fn run_test() -> Result<()> {
         ClientOptions {
             request_timeout: Duration::from_secs(60),
             choose_strategy: everscale_rpc_client::ChooseStrategy::RoundRobin,
+            reliability_params: ReliabilityParams {
+                mc_acceptable_time_diff_sec: app_args.node_is_dead_seconds,
+                sc_acceptable_time_diff_sec: app_args.node_is_dead_seconds,
+                acceptable_blocks_diff: 500,
+            },
             ..Default::default()
         },
     )

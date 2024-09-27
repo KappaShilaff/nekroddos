@@ -6,7 +6,6 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use ed25519_dalek::Keypair;
 use everscale_rpc_client::RpcClient;
-use futures_util::StreamExt;
 use governor::Jitter;
 use nekoton_abi::{FunctionExt, KnownParamTypePlain, PackAbi, PackAbiPlain, UnpackAbiPlain};
 use nekoton_utils::SimpleClock;
@@ -123,7 +122,7 @@ async fn ddos_job(
         .client
         .get_contract_state(&from, None)
         .await?
-        .expect(format!("No state for {}", from).as_str())
+        .unwrap_or_else(|| panic!("No state for {}", from))
         .account;
 
     for _ in 1..=test_env.num_iterations {
