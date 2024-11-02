@@ -13,6 +13,7 @@ use url::Url;
 mod abi;
 mod app_cache;
 mod build_payload;
+mod latency;
 mod models;
 mod send;
 
@@ -50,6 +51,7 @@ enum Commands {
     Swap(SwapTestArgs),
     Dag(DagTestArgs),
     Send(SendTestArgs),
+    Latency(latency::LatencyTestArgs),
 }
 
 pub async fn run_test() -> Result<()> {
@@ -88,6 +90,9 @@ pub async fn run_test() -> Result<()> {
         }
         Commands::Send(args) => {
             send_tokens::run(args.clone(), app_args, keypair, client).await?;
+        }
+        Commands::Latency(args) => {
+            latency::run(args.clone(), app_args, &keypair, client).await?;
         }
     }
 
