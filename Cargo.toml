@@ -28,6 +28,7 @@ env_logger = "0.11.3"
 governor = "0.6.3"
 chrono = "0.4.38"
 indexmap = "2.2.6"
+rand_distr = "0.4.3"
 
 [dev-dependencies]
 

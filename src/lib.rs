@@ -17,6 +17,8 @@ mod latency;
 mod models;
 mod send;
 
+mod rand_send;
+
 mod dag;
 mod send_tokens;
 mod swap;
@@ -52,6 +54,7 @@ enum Commands {
     Dag(DagTestArgs),
     Send(SendTestArgs),
     Latency(latency::LatencyTestArgs),
+    RandSend(rand_send::RandSendTestArgs),
 }
 
 pub async fn run_test() -> Result<()> {
@@ -93,6 +96,9 @@ pub async fn run_test() -> Result<()> {
         }
         Commands::Latency(args) => {
             latency::run(args.clone(), app_args, &keypair, client).await?;
+        }
+        Commands::RandSend(arg) => {
+            rand_send::run(arg.clone(), app_args, keypair, client).await?;
         }
     }
 
