@@ -11,8 +11,11 @@ use nekoton_abi::{FunctionExt, KnownParamTypePlain, PackAbi, PackAbiPlain, Unpac
 use nekoton_utils::SimpleClock;
 use rand::prelude::{SliceRandom, StdRng};
 use rand::{Rng, SeedableRng};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::io::AsyncWriteExt;
+use tokio::sync::mpsc::UnboundedSender;
 use ton_block::MsgAddressInt;
 use ton_types::{BuilderData, UInt256};
 
@@ -27,6 +30,9 @@ pub struct SendTestArgs {
 
     #[clap(long, default_value = "false")]
     only_stats: bool,
+
+    #[clap(long)]
+    log_file: Option<PathBuf>,
 }
 pub async fn run(
     swap_args: SendTestArgs,
@@ -62,7 +68,19 @@ pub async fn run(
     .context("Failed to get wallets")?;
     recievers.sort();
 
-    spawn_ddos_jobs(&swap_args, client, recievers, common_args, key_pair).await?;
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+    if let Some(log_file) = swap_args.log_file.clone() {
+        tokio::spawn(async move {
+            let file = tokio::fs::File::create(log_file).await.unwrap();
+            let mut file = tokio::io::BufWriter::new(file);
+            while let Some(addr) = rx.recv().await {
+                file.write_all(addr.as_str().as_bytes()).await.unwrap();
+                file.write_all(b"\n").await.unwrap();
+            }
+        });
+    }
+
+    spawn_ddos_jobs(&swap_args, client, recievers, common_args, key_pair, tx).await?;
 
     Ok(())
 }
@@ -73,6 +91,7 @@ async fn spawn_ddos_jobs(
     recievers: Vec<MsgAddressInt>,
     common_args: Args,
     key_pair: Arc<Keypair>,
+    tx: UnboundedSender<String>,
 ) -> Result<()> {
     let test_env = TestEnv::new(
         args.num_iterations,
@@ -99,7 +118,15 @@ async fn spawn_ddos_jobs(
         let env = test_env.clone();
         let receivers = receivers.clone();
         let key_pair = key_pair.clone();
-        tokio::spawn(ddos_job(env, receiver.clone(), receivers, key_pair, rng));
+        let tx = tx.clone();
+        tokio::spawn(ddos_job(
+            env,
+            receiver.clone(),
+            receivers,
+            key_pair,
+            rng,
+            tx,
+        ));
     }
     log::info!("All jobs spawned");
 
@@ -116,6 +143,7 @@ async fn ddos_job(
     wallets: Arc<Vec<MsgAddressInt>>,
     signer: Arc<Keypair>,
     mut rng: StdRng,
+    tx: UnboundedSender<String>,
 ) -> Result<()> {
     let jitter = Jitter::new(Duration::from_millis(1), Duration::from_millis(50));
     let state = test_env
@@ -135,8 +163,10 @@ async fn ddos_job(
             let signer = signer.clone();
             let from = from.clone();
             let state = state.clone();
+            let tx = tx.clone();
 
             tokio::spawn(async move {
+                let addr_str = rand_dst.to_string();
                 send::send(
                     &client,
                     &signer,
@@ -149,6 +179,7 @@ async fn ddos_job(
                 )
                 .await
                 .unwrap();
+                let _ = tx.send(addr_str);
                 counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             })
         };

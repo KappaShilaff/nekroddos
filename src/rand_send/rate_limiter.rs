@@ -41,7 +41,8 @@ impl LoadPattern {
 
         const MAX_ITERATIONS: usize = 50;
         const TARGET_ACCURACY: f64 = 0.01;
-        const TARGET_MAX_HITS: f64 = 0.002;
+        const TARGET_MAX_HITS: f64 = 0.005;
+        const SPIKE_HITS: f64 = 0.2;
 
         let mut best_params = self.clone();
         let mut best_error = f64::MAX;
@@ -55,6 +56,12 @@ impl LoadPattern {
             let max_hits = timeline
                 .iter()
                 .filter(|&&x| x >= (self.max_rps * 0.995) as u64)
+                .count() as f64
+                / duration_seconds as f64;
+
+            let spike_hits = timeline
+                .iter()
+                .filter(|&&x| x >= self.target_avg as _)
                 .count() as f64
                 / duration_seconds as f64;
 
@@ -72,6 +79,11 @@ impl LoadPattern {
                 "  Max hits: {:.3}% (target: {:.3}%)",
                 max_hits * 100.0,
                 TARGET_MAX_HITS * 100.0
+            );
+            log::info!(
+                "  Spike hits: {:.3}% (target: {}%)",
+                spike_hits * 100.0,
+                SPIKE_HITS * 100.0
             );
             log::info!(
                 "  Parameters: base={:.1}, spike={:.4}, max_spike={:.4}",
@@ -96,17 +108,20 @@ impl LoadPattern {
 
             if max_hits < TARGET_MAX_HITS {
                 self.max_spike_chance *= 1.2;
-                self.spike_chance *= 1.1;
             } else {
                 self.max_spike_chance *= 0.8;
-                self.spike_chance *= 0.9;
+            }
+            if spike_hits < SPIKE_HITS {
+                self.spike_chance *= 1.2;
+            } else {
+                self.spike_chance *= 0.8;
             }
 
-            self.spike_chance = self.spike_chance.clamp(0.02, 0.15);
-            self.max_spike_chance = self.max_spike_chance.clamp(0.01, 0.05);
+            self.spike_chance = self.spike_chance.clamp(0.02, 0.6);
+            self.max_spike_chance = self.max_spike_chance.clamp(0.01, 0.2);
             self.base_level = self
                 .base_level
-                .clamp(self.target_avg * 0.1, self.target_avg * 0.7);
+                .clamp(self.target_avg * 0.01, self.target_avg * 0.7);
         }
 
         if iteration >= MAX_ITERATIONS {
@@ -176,7 +191,7 @@ impl LoadPattern {
         let final_rps = current_base + spike_value;
         let noisy_rps = final_rps * (1.0 + noise);
 
-        noisy_rps.round().clamp(self.min_rps, self.max_rps) as u64
+        noisy_rps.round().clamp(0.0, self.max_rps) as u64
     }
 
     pub fn generate_timeline(&mut self, duration_seconds: u32) -> Vec<u64> {
