@@ -12,6 +12,7 @@ pub struct LoadPattern {
     max_spike_chance: f64,
     noise_factor: f64,
     last_spike_time: f64,
+    current_spike: Option<(f64, f64, u32)>, // (magnitude, start_time, duration)
 }
 
 impl LoadPattern {
@@ -24,11 +25,12 @@ impl LoadPattern {
             min_rps,
             max_rps,
             target_avg,
-            base_level: target_avg * 0.7, // Lower base to allow more spikes
-            spike_chance: 0.03,
-            max_spike_chance: 0.01,
+            base_level: target_avg * 0.5, // Lower base to allow more dramatic spikes
+            spike_chance: 0.05,
+            max_spike_chance: 0.02,
             noise_factor: 0.1,
-            last_spike_time: -100.0, // Initialize to allow immediate spikes
+            last_spike_time: -100.0,
+            current_spike: None,
         };
 
         Ok(pattern)
@@ -37,9 +39,9 @@ impl LoadPattern {
     pub fn calibrate(&mut self, duration_seconds: u32) {
         log::info!("Starting calibration...");
 
-        const MAX_ITERATIONS: usize = 50; // Maximum iterations to prevent infinite loops
-        const TARGET_ACCURACY: f64 = 0.01; // Target within 1% of the desired average
-        const TARGET_MAX_HITS: f64 = 0.002; // Target 0.2% of the time at max
+        const MAX_ITERATIONS: usize = 50;
+        const TARGET_ACCURACY: f64 = 0.01;
+        const TARGET_MAX_HITS: f64 = 0.002;
 
         let mut best_params = self.clone();
         let mut best_error = f64::MAX;
@@ -48,7 +50,6 @@ impl LoadPattern {
         while iteration < MAX_ITERATIONS {
             iteration += 1;
 
-            // Generate timeline and calculate metrics
             let timeline = self.generate_timeline(duration_seconds);
             let actual_avg = timeline.iter().sum::<u64>() as f64 / duration_seconds as f64;
             let max_hits = timeline
@@ -57,7 +58,6 @@ impl LoadPattern {
                 .count() as f64
                 / duration_seconds as f64;
 
-            // Calculate error metrics
             let avg_error = ((actual_avg - self.target_avg) / self.target_avg).abs();
             let max_hits_error = (max_hits - TARGET_MAX_HITS).abs();
             let combined_error = avg_error + max_hits_error;
@@ -81,25 +81,19 @@ impl LoadPattern {
             );
             log::info!("  Error: {:.4}", combined_error);
 
-            // Save best parameters
             if combined_error < best_error {
                 best_error = combined_error;
                 best_params = self.clone();
             }
 
-            // Check if we've reached the desired accuracy
             if avg_error <= TARGET_ACCURACY && (max_hits_error <= TARGET_MAX_HITS) {
                 log::info!("\nTarget accuracy reached!");
                 break;
             }
 
-            // Adjust parameters
             let avg_ratio = self.target_avg / actual_avg;
-
-            // Adjust base level based on average error
             self.base_level *= avg_ratio.powf(0.5);
 
-            // Adjust spike probabilities based on max hits
             if max_hits < TARGET_MAX_HITS {
                 self.max_spike_chance *= 1.2;
                 self.spike_chance *= 1.1;
@@ -108,15 +102,13 @@ impl LoadPattern {
                 self.spike_chance *= 0.9;
             }
 
-            // Keep probabilities in reasonable bounds
-            self.spike_chance = self.spike_chance.clamp(0.01, 0.1);
-            self.max_spike_chance = self.max_spike_chance.clamp(0.001, 0.03);
+            self.spike_chance = self.spike_chance.clamp(0.02, 0.15);
+            self.max_spike_chance = self.max_spike_chance.clamp(0.01, 0.05);
             self.base_level = self
                 .base_level
-                .clamp(self.target_avg * 0.5, self.target_avg * 0.9);
+                .clamp(self.target_avg * 0.1, self.target_avg * 0.7);
         }
 
-        // Restore best parameters if we didn't converge
         if iteration >= MAX_ITERATIONS {
             log::info!("\nMax iterations reached. Using best found parameters.");
             *self = best_params;
@@ -128,30 +120,27 @@ impl LoadPattern {
         log::info!("Max spike chance: {:.4}", self.max_spike_chance);
     }
 
-    fn determine_spike_type(&self, time_seconds: f64, rng: &mut StdRng) -> Option<f64> {
+    fn determine_spike_type(&self, time_seconds: f64, rng: &mut StdRng) -> Option<(f64, u32)> {
         let time_since_last_spike = time_seconds - self.last_spike_time;
 
-        // Increased chance for spikes if we haven't had one recently
         let base_multiplier = if time_since_last_spike > 60.0 {
-            1.5
+            2.0
         } else {
             1.0
         };
 
-        // Chance for maximum spike
         if rng.gen::<f64>() < self.max_spike_chance * base_multiplier {
-            return Some(1.0); // Maximum spike
+            return Some((1.0, rng.gen_range(3..8))); // Max spike lasts 3-8 seconds
         }
 
-        // Chance for regular spike with varying magnitudes
         if rng.gen::<f64>() < self.spike_chance * base_multiplier {
-            // Generate different spike types
             let spike_type = rng.gen::<f64>();
-            return Some(match spike_type {
-                x if x < 0.4 => rng.gen_range(0.3..0.5), // Medium spike
-                x if x < 0.7 => rng.gen_range(0.5..0.8), // Large spike
-                _ => rng.gen_range(0.8..0.95),           // Very large spike
-            });
+            let (magnitude, duration) = match spike_type {
+                x if x < 0.3 => (rng.gen_range(0.5..0.7), rng.gen_range(2..5)), // Medium spike
+                x if x < 0.6 => (rng.gen_range(0.7..0.9), rng.gen_range(3..6)), // Large spike
+                _ => (rng.gen_range(0.9..1.0), rng.gen_range(4..8)),            // Very large spike
+            };
+            return Some((magnitude, duration));
         }
 
         None
@@ -160,33 +149,33 @@ impl LoadPattern {
     fn get_tps(&mut self, time_seconds: f64) -> u64 {
         let mut rng = StdRng::seed_from_u64(time_seconds as u64);
 
-        // Base load with a random walk
         let normal = Normal::new(0.0, 0.1).unwrap();
         let walk = normal.sample(&mut rng);
         let current_base = self.base_level * (1.0 + walk * 0.2);
 
-        // Check for spike
-        let spike_value = if let Some(magnitude) = self.determine_spike_type(time_seconds, &mut rng)
+        let spike_value = if let Some((magnitude, start_time, duration)) = self.current_spike {
+            if time_seconds < start_time + duration as f64 {
+                let progress = (time_seconds - start_time) / duration as f64;
+                let decay = 1.0 - progress.powf(2.0);
+                (self.max_rps - current_base) * magnitude * decay
+            } else {
+                self.current_spike = None;
+                0.0
+            }
+        } else if let Some((magnitude, duration)) =
+            self.determine_spike_type(time_seconds, &mut rng)
         {
             self.last_spike_time = time_seconds;
-            let spike_height = (self.max_rps - current_base) * magnitude;
-
-            // Chance for aftershock
-            if rng.gen::<f64>() < 0.4 {
-                spike_height * rng.gen_range(0.4..0.8)
-            } else {
-                spike_height
-            }
+            self.current_spike = Some((magnitude, time_seconds, duration));
+            (self.max_rps - current_base) * magnitude
         } else {
             0.0
         };
 
-        // Add noise to the combined value
         let noise = (rng.gen::<f64>() * 2.0 - 1.0) * self.noise_factor;
         let final_rps = current_base + spike_value;
         let noisy_rps = final_rps * (1.0 + noise);
 
-        // Ensure we stay within bounds
         noisy_rps.round().clamp(self.min_rps, self.max_rps) as u64
     }
 
@@ -217,5 +206,21 @@ mod test {
         let total: u64 = timeline.iter().sum();
         let avg = total as f64 / 3600.0;
         assert!((avg - 50.0).abs() < 5.0);
+    }
+
+    #[test]
+    fn print_csv() {
+        env_logger::Builder::new()
+            .is_test(true)
+            .filter_level(LevelFilter::Debug)
+            .try_init()
+            .unwrap();
+        let mut pattern = LoadPattern::new(200.0, 10000.0, 1000.0).unwrap();
+        pattern.calibrate(3600);
+        let timeline = pattern.generate_timeline(3600);
+        println!("iteration,requests_per_second");
+        for (i, rps) in timeline.iter().enumerate() {
+            println!("{},{}", i, rps);
+        }
     }
 }

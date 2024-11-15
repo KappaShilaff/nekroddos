@@ -112,7 +112,7 @@ async fn spawn_ddos_jobs(
     };
 
     spawn_progress_printer(counter.clone());
-    const WINDOW_LEN: u64 = 5;
+    const WINDOW_LEN: u64 = 1;
     let mut interval = tokio::time::interval(Duration::from_secs(WINDOW_LEN));
 
     for tps in tps {
