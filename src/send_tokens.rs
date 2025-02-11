@@ -74,7 +74,7 @@ pub async fn run(
             let file = tokio::fs::File::create(log_file).await.unwrap();
             let mut file = tokio::io::BufWriter::new(file);
             while let Some(addr) = rx.recv().await {
-                file.write_all(addr.as_str().as_bytes()).await.unwrap();
+                file.write_all(addr.as_bytes()).await.unwrap();
                 file.write_all(b"\n").await.unwrap();
             }
         });
@@ -174,7 +174,6 @@ async fn ddos_job(
                     BuilderData::new(),
                     rand_dst,
                     1_000_000,
-                    None,
                     &state,
                 )
                 .await

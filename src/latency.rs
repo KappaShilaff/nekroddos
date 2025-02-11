@@ -163,7 +163,6 @@ async fn send_test_transaction(
         payload,
         receiver.clone(),
         amount,
-        None,
         &state.account,
     )
     .await?;

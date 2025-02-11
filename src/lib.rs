@@ -77,7 +77,6 @@ pub async fn run_test() -> Result<()> {
             reliability_params: ReliabilityParams {
                 mc_acceptable_time_diff_sec: app_args.node_is_dead_seconds,
                 sc_acceptable_time_diff_sec: app_args.node_is_dead_seconds,
-                acceptable_blocks_diff: 500,
             },
             ..Default::default()
         },
