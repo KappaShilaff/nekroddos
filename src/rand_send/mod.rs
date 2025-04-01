@@ -12,6 +12,8 @@ use nekoton_utils::SimpleClock;
 use rand::prelude::{SliceRandom, StdRng};
 use rand::SeedableRng;
 use std::collections::HashMap;
+use std::io::Write;
+use std::path::Path;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Duration;
@@ -36,6 +38,9 @@ pub struct RandSendTestArgs {
 
     #[clap(short, long)]
     to_rps: u32,
+    
+    #[clap(long)]
+    save_accounts: Option<std::path::PathBuf>,
 }
 
 pub async fn run(
@@ -71,6 +76,11 @@ pub async fn run(
     .await
     .context("Failed to get wallets")?;
     recievers.sort();
+
+    if let Some(path) = &swap_args.save_accounts {
+        save_accounts_to_file(&recievers, path)?;
+        log::info!("Saved {} accounts to {:?}", recievers.len(), path);
+    }
 
     spawn_ddos_jobs(&swap_args, client, recievers, common_args, key_pair).await?;
 
@@ -190,6 +200,13 @@ pub fn spawn_progress_printer(counter: Arc<AtomicU64>) -> JoinHandle<()> {
             );
         }
     })
+}
+fn save_accounts_to_file(accounts: &[MsgAddressInt], path: &Path) -> Result<()> {
+    let mut file = std::fs::File::create(path)?;
+    for account in accounts {
+        writeln!(file, "{}", account)?;
+    }
+    Ok(())
 }
 
 async fn get_wallets(
