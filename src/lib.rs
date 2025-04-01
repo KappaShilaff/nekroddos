@@ -21,6 +21,7 @@ mod rand_send;
 
 mod dag;
 mod send_tokens;
+mod send_to_targets;
 mod swap;
 mod util;
 
@@ -55,6 +56,7 @@ enum Commands {
     Send(SendTestArgs),
     Latency(latency::LatencyTestArgs),
     RandSend(rand_send::RandSendTestArgs),
+    SendToTargets(send_to_targets::SendToTargetsArgs),
 }
 
 pub async fn run_test() -> Result<()> {
@@ -98,6 +100,9 @@ pub async fn run_test() -> Result<()> {
         }
         Commands::RandSend(arg) => {
             rand_send::run(arg.clone(), app_args, keypair, client).await?;
+        }
+        Commands::SendToTargets(args) => {
+            send_to_targets::run(args.clone(), app_args, keypair, client).await?;
         }
     }
 

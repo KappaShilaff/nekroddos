@@ -28,3 +28,6 @@ declare_abi! {
     dudos_factory => "dudos-factory.json",
     wallet_factory => "WalletFactory.json"
 }
+
+mod wallet;
+pub use wallet::*;

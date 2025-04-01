@@ -1,4 +1,4 @@
-use crate::abi::wallet_factory;
+use crate::abi::{get_wallet, GetWalletFunctionInput, GetWalletFunctionOutput};
 use crate::models::GenericDeploymentInfo;
 use crate::send::send;
 use crate::Args;
@@ -7,7 +7,7 @@ use clap::Parser;
 use ed25519_dalek::Keypair;
 use everscale_rpc_client::RpcClient;
 use futures_util::StreamExt;
-use nekoton_abi::{FunctionExt, KnownParamTypePlain, PackAbi, PackAbiPlain, UnpackAbiPlain};
+use nekoton_abi::{FunctionExt, PackAbiPlain, UnpackAbiPlain};
 use nekoton_utils::SimpleClock;
 use rand::prelude::{SliceRandom, StdRng};
 use rand::SeedableRng;
@@ -220,20 +220,3 @@ async fn get_wallets(
     Ok(recipients)
 }
 
-#[derive(Debug, Clone, PackAbiPlain, UnpackAbiPlain, KnownParamTypePlain)]
-pub struct GetWalletFunctionInput {
-    #[abi(name = "_index", uint64)]
-    pub index: u64,
-    #[abi(name = "_publicKey", uint256)]
-    pub public_key: ton_types::UInt256,
-}
-
-#[derive(Debug, Clone, PackAbi, UnpackAbiPlain, KnownParamTypePlain)]
-pub struct GetWalletFunctionOutput {
-    #[abi(address)]
-    pub receiver: ton_block::MsgAddressInt,
-}
-
-pub fn get_wallet() -> &'static ton_abi::Function {
-    wallet_factory().function("get_wallet").unwrap()
-}
