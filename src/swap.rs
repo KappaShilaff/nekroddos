@@ -41,11 +41,24 @@ pub async fn run(
         panic!("Depth should be at least 2");
     }
 
-    let deployments_path = common_args.project_root.join("deployments");
+    let base_deployments_path = common_args.project_root.join("deployments");
+    let network_deployments_path = if let Some(network_name) = &common_args.network {
+        base_deployments_path.join(network_name)
+    } else {
+        base_deployments_path
+    };
+
+    if common_args.network.is_some() && !network_deployments_path.is_dir() {
+        return Err(anyhow::anyhow!(
+            "Specified network deployment directory not found: {:?}",
+            network_deployments_path
+        ));
+    }
+
     let mut recipients = Vec::new();
     let mut pool_addresses = Vec::new();
 
-    for file in walkdir::WalkDir::new(&deployments_path)
+    for file in walkdir::WalkDir::new(&network_deployments_path)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())

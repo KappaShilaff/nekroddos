@@ -32,10 +32,23 @@ pub struct DagTestArgs {
     only_stats: bool,
 }
 pub async fn run(swap_args: DagTestArgs, common_args: Args, client: RpcClient) -> Result<()> {
-    let deployments_path = common_args.project_root.join("deployments");
-    log::info!("Deployments path: {:?}", deployments_path);
+    let base_deployments_path = common_args.project_root.join("deployments");
+    let network_deployments_path = if let Some(network_name) = &common_args.network {
+        base_deployments_path.join(network_name)
+    } else {
+        base_deployments_path
+    };
 
-    let factory_abi = walkdir::WalkDir::new(&deployments_path)
+    if common_args.network.is_some() && !network_deployments_path.is_dir() {
+        return Err(anyhow::anyhow!(
+            "Specified network deployment directory not found: {:?}",
+            network_deployments_path
+        ));
+    }
+
+    log::info!("Using deployments path: {:?}", network_deployments_path);
+
+    let factory_abi = walkdir::WalkDir::new(&network_deployments_path)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())

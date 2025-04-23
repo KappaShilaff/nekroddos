@@ -47,6 +47,10 @@ struct Args {
     /// Which timediff makes the node dead
     #[clap(long = "dead-seconds", default_value = "120")]
     node_is_dead_seconds: u64,
+
+    /// Select the network-specific deployment directory under <project_root>/deployments/
+    #[clap(long)]
+    network: Option<String>,
 }
 
 #[derive(Subcommand, Debug, Clone)]
