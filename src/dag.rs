@@ -30,6 +30,9 @@ pub struct DagTestArgs {
 
     #[clap(long, default_value = "false")]
     only_stats: bool,
+
+    #[clap(long, default_value = "false")]
+    rand_cell: bool,
 }
 pub async fn run(swap_args: DagTestArgs, common_args: Args, client: RpcClient) -> Result<()> {
     let base_deployments_path = common_args.project_root.join("deployments");
@@ -95,9 +98,9 @@ async fn spawn_ddos_jobs(
 
     log::info!("Spawning ddos jobs for {} recievers", recievers.len());
 
-    for reciever in recievers.clone() {
+    for (receiver_idx, reciever) in recievers.clone().into_iter().enumerate() {
         let env = test_env.clone();
-        tokio::spawn(ddos_job(env, reciever, args.payload_size));
+        tokio::spawn(ddos_job(env, reciever, args.payload_size, args.rand_cell, receiver_idx as u32));
     }
     log::info!("All jobs spawned");
 
@@ -149,10 +152,10 @@ async fn print_stats(recievers: Vec<MsgAddressInt>, test_env: &TestEnv) {
     }
 }
 
-async fn ddos_job(test_env: TestEnv, reciever: MsgAddressInt, payload_size: u32) -> Result<()> {
+async fn ddos_job(test_env: TestEnv, reciever: MsgAddressInt, payload_size: u32, rand_cell: bool, receiver_idx: u32) -> Result<()> {
     let jitter = Jitter::new(Duration::from_millis(1), Duration::from_millis(50));
     for i in 1..=test_env.num_iterations {
-        let payload = get_dag_payload(i, payload_size, test_env.seed, reciever.clone());
+        let payload = get_dag_payload(i, payload_size, test_env.seed, reciever.clone(), rand_cell, receiver_idx);
         test_env.rate_limiter.until_ready_with_jitter(jitter).await;
         let h = {
             let client = test_env.client.clone();

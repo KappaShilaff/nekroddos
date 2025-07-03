@@ -160,11 +160,19 @@ pub fn get_dag_payload(
     data_size: u32,
     seed: Option<u64>,
     dst: MsgAddressInt,
+    rand_cell: bool,
+    receiver_idx: u32,
 ) -> ton_block::Message {
     static PAYLOAD: OnceLock<Cell> = OnceLock::new();
-    let data = PAYLOAD.get_or_init(|| {
-        let seed = seed.unwrap_or_else(rand::random);
-        let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+    let data = if rand_cell {
+        // Generate unique data for each message
+        let base_seed = seed.unwrap_or_else(rand::random);
+        // Combine base seed with both index and receiver_idx for uniqueness
+        let unique_seed = base_seed
+            .wrapping_add(index as u64)
+            .wrapping_add((receiver_idx as u64) << 32);
+        
+        let mut rng = rand::rngs::StdRng::seed_from_u64(unique_seed);
         let mut data = vec![0_u8; data_size as usize];
         rng.fill_bytes(&mut data);
 
@@ -173,7 +181,21 @@ pub fn get_dag_payload(
             .pack_into_chain(&ABI_VERSION_2_3)
             .unwrap();
         data.into_cell().unwrap()
-    });
+    } else {
+        // Use static payload for all messages
+        PAYLOAD.get_or_init(|| {
+            let seed = seed.unwrap_or_else(rand::random);
+            let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+            let mut data = vec![0_u8; data_size as usize];
+            rng.fill_bytes(&mut data);
+
+            let data = data
+                .token_value()
+                .pack_into_chain(&ABI_VERSION_2_3)
+                .unwrap();
+            data.into_cell().unwrap()
+        }).clone()
+    };
 
     let abi = receiver();
     let method = abi.function("fill").unwrap();
