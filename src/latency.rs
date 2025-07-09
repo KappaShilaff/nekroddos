@@ -30,8 +30,8 @@ pub struct LatencyTestArgs {
     csv: Option<PathBuf>,
 
     #[clap(long)]
-    /// Generate interactive HTML plot
-    plot: bool,
+    /// Path to save interactive HTML plot (if specified, plot will be generated)
+    plot: Option<PathBuf>,
     
     #[clap(long)]
     /// SLA threshold for marking violations
@@ -172,13 +172,7 @@ pub(crate) async fn run(
         log::info!("P95 latency: {:?}", p95);
         log::info!("P99 latency: {:?}", p99);
 
-        if latency_args.plot {
-            let plot_path = if let Some(ref csv_path) = latency_args.csv {
-                csv_path.with_extension("html")
-            } else {
-                PathBuf::from("latency_combined.html")
-            };
-            
+        if let Some(plot_path) = latency_args.plot {
             let stats = plotting::LatencyStats {
                 avg,
                 p50,
@@ -203,7 +197,7 @@ pub(crate) async fn run(
 
     Ok(())
 }
-async fn send_test_transaction(
+    async fn send_test_transaction(
     client: &RpcClient,
     keypair: &Keypair,
     sender: &ton_block::MsgAddressInt,
