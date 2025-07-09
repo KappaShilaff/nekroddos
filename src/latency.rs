@@ -1,5 +1,5 @@
-pub mod plotting;
 pub mod combined_plot;
+pub mod plotting;
 
 use crate::models::GenericDeploymentInfo;
 use crate::{send, Args};
@@ -10,6 +10,7 @@ use everscale_rpc_client::RpcClient;
 use governor::{Jitter, RateLimiter};
 use std::io::Write;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::time::{Duration, Instant, SystemTime};
 
 #[derive(Parser, Debug, Clone)]
@@ -32,11 +33,11 @@ pub struct LatencyTestArgs {
     #[clap(long, value_name = "PATH")]
     /// Path to save interactive HTML plot (if specified, plot will be generated)
     plot: Option<PathBuf>,
-    
+
     #[clap(long)]
     /// SLA threshold for marking violations
     sla_threshold: Option<u64>,
-    
+
     #[clap(long)]
     /// Time window in minutes for time series plots (auto-calculated if not specified)
     time_window: Option<u64>,
@@ -121,23 +122,30 @@ pub(crate) async fn run(
         None
     };
 
-    let jitter = Jitter::new(Duration::from_millis(1), Duration::from_millis(50));
     let mut latencies = Vec::with_capacity(latency_args.num_txs);
     let mut timestamped_latencies = Vec::with_capacity(latency_args.num_txs);
     let mut success_count = 0;
     let mut error_count = 0;
 
+    let receiver = ton_block::MsgAddressInt::from_str(
+        "0:0000000000000000000000000000000000000000000000000000000000000000",
+    )?;
+
     for i in 0..std::cmp::min(latency_args.num_txs, max_iterations as usize) {
-        rl.until_ready_with_jitter(jitter).await;
+        rl.until_ready().await;
 
         let start = Instant::now();
         let ts = SystemTime::now();
 
-        match send_test_transaction(&client, keypair, &sender, &sender, latency_args.amount).await {
+        match send_test_transaction(&client, keypair, &sender, &receiver, latency_args.amount).await
+        {
             Ok(_) => {
                 let latency = start.elapsed();
                 latencies.push(latency);
-                timestamped_latencies.push(plotting::TimestampedLatency { timestamp: ts, latency });
+                timestamped_latencies.push(plotting::TimestampedLatency {
+                    timestamp: ts,
+                    latency,
+                });
                 success_count += 1;
                 log::debug!("Transaction {} succeeded in {:?}", i, latency);
 
@@ -181,7 +189,7 @@ pub(crate) async fn run(
                 min,
                 max,
             };
-            
+
             plotting::generate_combined_plots(
                 &latencies,
                 &timestamped_latencies,
@@ -190,14 +198,15 @@ pub(crate) async fn run(
                 latency_args.time_window,
                 latency_args.sla_threshold.map(|t| t as f64),
             )?;
-            
+
             log::info!("Plot saved to: {:?}", plot_path);
         }
     }
 
     Ok(())
 }
-    async fn send_test_transaction(
+
+async fn send_test_transaction(
     client: &RpcClient,
     keypair: &Keypair,
     sender: &ton_block::MsgAddressInt,
