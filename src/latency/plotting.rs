@@ -6,10 +6,10 @@ use charming::{
         Toolbox, ToolboxDataZoom
     },
     element::{
-        AreaStyle, AxisLabel, AxisPointer, AxisPointerType, 
-        AxisType, ItemStyle, 
-        JsFunction, Label, LabelPosition, LineStyle, LineStyleType, MarkArea, MarkAreaData, 
-        MarkLine, MarkLineData, MarkLineVariant, NameLocation, 
+        AreaStyle, AxisLabel, AxisLine, AxisPointer, AxisPointerType, 
+        AxisTick, AxisType, ItemStyle, 
+        JsFunction, Label, LineStyle, LineStyleType, MarkArea, MarkAreaData, 
+        MarkLine, MarkLineData, MarkLineVariant, NameLocation, Orient,
         SplitLine, Symbol, TextStyle, 
         Tooltip, Trigger
     },
@@ -37,11 +37,16 @@ fn build_density_chart(
 ) -> Chart {
     let latencies: Vec<f64> = latencies.iter().map(|d| d.as_millis() as f64).collect();
     
-    let bandwidth = silverman_bandwidth(&latencies);
+    // For bimodal distributions, reduce bandwidth to better show the peaks
+    let bandwidth = silverman_bandwidth(&latencies) * 0.7;
     let (kde_x, kde_y) = kernel_density_estimation(&latencies, bandwidth, 500);
     
     let n = latencies.len();
     let subtitle = format!("N = {n}   Bandwidth = {bandwidth:.2}");
+    
+    // Set fixed y-axis max for consistent display
+    let data_max = kde_y.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let y_axis_max = (data_max * 1.1 * 10000.0).ceil() / 10000.0; // Round up to nice value
     
     Chart::new()
         .title(
@@ -58,10 +63,20 @@ fn build_density_chart(
                 .bottom("8%")
                 .text_style(TextStyle::new().font_size(12).color("#64748b")),
         )
+        .legend(
+            Legend::new()
+                .data(vec!["Density", "P50", "P95", "P99"])
+                .top("5%")
+                .right("5%")
+                .orient(Orient::Vertical)
+                .text_style(TextStyle::new().color("#64748b"))
+                .item_width(25)
+                .item_height(14),
+        )
         .tooltip(
             Tooltip::new()
                 .trigger(Trigger::Axis)
-                .axis_pointer(AxisPointer::new().type_(AxisPointerType::Cross))
+                .axis_pointer(AxisPointer::new().type_(AxisPointerType::Line))
                 .formatter(JsFunction::new_with_args("params",
                     "const latency = params[0].value[0].toFixed(0);
                      const density = params[0].value[1].toFixed(4);
@@ -77,8 +92,8 @@ fn build_density_chart(
         .grid(
             Grid::new()
                 .left("8%")
-                .right("5%")
-                .top("12%")
+                .right("12%")
+                .top("8%")
                 .bottom("15%"),
         )
         .x_axis(
@@ -101,7 +116,10 @@ fn build_density_chart(
                 .name_gap(40)
                 .name_text_style(TextStyle::new().color("#64748b"))
                 .split_line(SplitLine::new().show(true).line_style(LineStyle::new().color("#2a3451")))
-                .axis_label(AxisLabel::new().color("#64748b")),
+                .axis_label(AxisLabel::new().color("#64748b"))
+                .axis_line(AxisLine::new().show(false))
+                .axis_tick(AxisTick::new().show(false))
+                .max(y_axis_max),
         )
         .series(
             Line::new()
@@ -118,43 +136,45 @@ fn build_density_chart(
                     .width(3)
                     .color("#00d4ff"))
                 .area_style(AreaStyle::new().color("rgba(0, 212, 255, 0.2)"))
-                .mark_line(MarkLine::new()
-                    .data(vec![
-                        MarkLineVariant::Simple(
-                            MarkLineData::new()
-                                .x_axis(stats.p50.as_millis() as f64)
-                                .name("P50")
-                                .label(Label::new()
-                                    .formatter("P50: {c} ms")
-                                    .color("#ffeb3b")
-                                    .position(LabelPosition::InsideEndTop)
-                                    .offset((10, -30)))
-                        ),
-                        MarkLineVariant::Simple(
-                            MarkLineData::new()
-                                .x_axis(stats.p95.as_millis() as f64)
-                                .name("P95")
-                                .label(Label::new()
-                                    .formatter("P95: {c} ms")
-                                    .color("#ff9800")
-                                    .position(LabelPosition::InsideEndTop)
-                                    .offset((0, -15)))
-                        ),
-                        MarkLineVariant::Simple(
-                            MarkLineData::new()
-                                .x_axis(stats.p99.as_millis() as f64)
-                                .name("P99")
-                                .label(Label::new()
-                                    .formatter("P99: {c} ms")
-                                    .color("#ff5252")
-                                    .position(LabelPosition::InsideEndTop)
-                                    .offset((0, 0)))
-                        ),
-                    ])
-                    .line_style(LineStyle::new()
-                        .width(2)
-                        .type_(LineStyleType::Dashed))
-                ),
+        )
+        .series(
+            Line::new()
+                .name("P50")
+                .data(vec![
+                    vec![stats.p50.as_millis() as f64, 0.0],
+                    vec![stats.p50.as_millis() as f64, y_axis_max],
+                ])
+                .symbol(Symbol::None)
+                .line_style(LineStyle::new()
+                    .width(2)
+                    .color("#ffd700")
+                    .type_(LineStyleType::Dashed))
+        )
+        .series(
+            Line::new()
+                .name("P95")
+                .data(vec![
+                    vec![stats.p95.as_millis() as f64, 0.0],
+                    vec![stats.p95.as_millis() as f64, y_axis_max],
+                ])
+                .symbol(Symbol::None)
+                .line_style(LineStyle::new()
+                    .width(2)
+                    .color("#ff6b6b")
+                    .type_(LineStyleType::Dashed))
+        )
+        .series(
+            Line::new()
+                .name("P99")
+                .data(vec![
+                    vec![stats.p99.as_millis() as f64, 0.0],
+                    vec![stats.p99.as_millis() as f64, y_axis_max],
+                ])
+                .symbol(Symbol::None)
+                .line_style(LineStyle::new()
+                    .width(2)
+                    .color("#e74c3c")
+                    .type_(LineStyleType::Dashed))
         )
 }
 
@@ -231,15 +251,44 @@ pub struct TimestampedLatency {
     pub latency: Duration,
 }
 
+fn calculate_optimal_window_seconds(data: &[TimestampedLatency]) -> u64 {
+    if data.is_empty() { 
+        return 60; // default 1 minute
+    }
+    
+    // Find time span
+    let timestamps: Vec<_> = data.iter().map(|d| d.timestamp).collect();
+    let first = timestamps.iter().min().unwrap();
+    let last = timestamps.iter().max().unwrap();
+    let span_secs = last.duration_since(*first).unwrap().as_secs();
+    
+    // Target 30-50 buckets for good granularity
+    let target_buckets = 40;
+    let window_secs = (span_secs / target_buckets).max(1);
+    
+    // Round to nice intervals
+    match window_secs {
+        0..=2 => 1,
+        3..=7 => 5,
+        8..=20 => 10,
+        21..=45 => 30,
+        46..=90 => 60,
+        91..=180 => 120,
+        181..=450 => 300,
+        451..=900 => 600,
+        _ => window_secs.div_ceil(300) * 300, // round to 5-minute intervals
+    }
+}
+
 fn bucket_by_time_window(
     data: &[TimestampedLatency], 
-    window_minutes: u64
+    window_seconds: u64
 ) -> HashMap<i64, Vec<f64>> {
     let mut buckets: HashMap<i64, Vec<f64>> = HashMap::new();
     
     for item in data {
         let timestamp = item.timestamp.duration_since(UNIX_EPOCH).unwrap().as_secs();
-        let bucket = (timestamp / (window_minutes * 60)) * (window_minutes * 60);
+        let bucket = (timestamp / window_seconds) * window_seconds;
         buckets.entry(bucket as i64)
             .or_default()
             .push(item.latency.as_millis() as f64);
@@ -301,10 +350,16 @@ fn mark_sla_violations(
 
 fn build_time_series_confidence_chart(
     data: &[TimestampedLatency],
-    window_minutes: u64,
+    window_minutes: Option<u64>,
     sla_threshold: Option<f64>,
 ) -> Chart {
-    let buckets = bucket_by_time_window(data, window_minutes);
+    // Calculate optimal window if not provided
+    let window_seconds = match window_minutes {
+        Some(minutes) => minutes * 60,
+        None => calculate_optimal_window_seconds(data),
+    };
+    
+    let buckets = bucket_by_time_window(data, window_seconds);
     let percentile_data = calculate_percentiles_by_bucket(&buckets, &[10.0, 50.0, 90.0]);
     
     let mut sorted_buckets: Vec<_> = buckets.keys().collect();
@@ -318,7 +373,13 @@ fn build_time_series_confidence_chart(
     
     for &bucket in &sorted_buckets {
         let dt = DateTime::<Utc>::from_timestamp(*bucket, 0).unwrap();
-        timestamps.push(dt.format("%Y-%m-%d %H:%M").to_string());
+        // Format based on window size
+        let format_str = match window_seconds {
+            1..=59 => "%H:%M:%S",       // Show seconds for windows < 1 minute
+            60..=3599 => "%H:%M",        // Show hours:minutes for windows < 1 hour
+            _ => "%Y-%m-%d %H:%M",       // Show date for larger windows
+        };
+        timestamps.push(dt.format(format_str).to_string());
         
         if let Some(percentiles) = percentile_data.get(bucket) {
             p10.push(percentiles[0]);
@@ -382,7 +443,6 @@ fn build_time_series_confidence_chart(
                 .axis_label(AxisLabel::new()
                     .rotate(45)
                     .color("#64748b")
-                    .interval(2)
                     .formatter(JsFunction::new_with_args("value",
                         "return value.split(' ')[1] || value;"
                     )))
@@ -565,7 +625,7 @@ pub fn generate_combined_plots(
     timestamped_data: &[TimestampedLatency],
     output_path: PathBuf,
     stats: &LatencyStats,
-    window_minutes: u64,
+    window_minutes: Option<u64>,
     sla_threshold: Option<f64>,
 ) -> Result<()> {
     let density_chart = build_density_chart(latencies, stats);

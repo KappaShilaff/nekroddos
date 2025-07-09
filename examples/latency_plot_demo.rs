@@ -12,17 +12,22 @@ fn main() -> Result<()> {
     env_logger::init();
 
     let mut rng = rand::thread_rng();
-    let normal = Normal::new(500.0, 150.0).unwrap();
+    
+    // Create bimodal distribution: 70% around 500ms, 30% around 3500ms
+    let normal_fast = Normal::new(500.0, 100.0).unwrap();
+    let normal_slow = Normal::new(3500.0, 200.0).unwrap();
     
     let mut latencies = Vec::new();
     for _ in 0..1000 {
-        let mut latency: f64 = normal.sample(&mut rng);
+        let latency: f64 = if rng.gen_bool(0.7) {
+            // Fast mode: centered around 500ms
+            normal_fast.sample(&mut rng)
+        } else {
+            // Slow mode: centered around 3500ms
+            normal_slow.sample(&mut rng)
+        };
         
-        if rng.gen_bool(0.05) {
-            latency = rng.gen_range(2000.0..5000.0);
-        }
-        
-        latency = latency.clamp(100.0, 5000.0);
+        let latency = latency.clamp(100.0, 5000.0);
         latencies.push(Duration::from_millis(latency as u64));
     }
 
@@ -73,7 +78,7 @@ fn main() -> Result<()> {
         &timestamped_latencies,
         combined_path.clone(),
         &stats,
-        5,
+        None,  // Auto-calculate optimal window based on data
         Some(1000.0),
     )?;
     println!("\nCombined plot saved to: {combined_path:?}");

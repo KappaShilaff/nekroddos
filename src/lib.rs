@@ -24,6 +24,8 @@ mod send_tokens;
 mod send_to_targets;
 mod swap;
 mod util;
+#[cfg(test)]
+mod test_chart_series;
 
 #[derive(Parser, Debug, Clone)]
 pub(crate) struct Args {

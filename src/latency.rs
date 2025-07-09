@@ -29,7 +29,7 @@ pub struct LatencyTestArgs {
     #[clap(short, long)]
     csv: Option<PathBuf>,
 
-    #[clap(long)]
+    #[clap(long, value_name = "PATH")]
     /// Path to save interactive HTML plot (if specified, plot will be generated)
     plot: Option<PathBuf>,
     
@@ -37,9 +37,9 @@ pub struct LatencyTestArgs {
     /// SLA threshold for marking violations
     sla_threshold: Option<u64>,
     
-    #[clap(long, default_value = "5")]
-    /// Time window for time series plots
-    time_window: u64,
+    #[clap(long)]
+    /// Time window in minutes for time series plots (auto-calculated if not specified)
+    time_window: Option<u64>,
 }
 
 pub(crate) async fn run(
