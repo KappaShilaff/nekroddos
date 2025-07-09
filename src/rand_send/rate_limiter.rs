@@ -4,7 +4,6 @@ use rand_distr::{Distribution, Normal};
 
 #[derive(Debug, Clone)]
 pub struct LoadPattern {
-    min_rps: f64,
     max_rps: f64,
     target_avg: f64,
     base_level: f64,
@@ -22,7 +21,6 @@ impl LoadPattern {
         }
 
         let pattern = LoadPattern {
-            min_rps,
             max_rps,
             target_avg,
             base_level: target_avg * 0.5, // Lower base to allow more dramatic spikes
@@ -235,7 +233,7 @@ mod test {
         let timeline = pattern.generate_timeline(3600);
         println!("iteration,requests_per_second");
         for (i, rps) in timeline.iter().enumerate() {
-            println!("{},{}", i, rps);
+            println!("{i},{rps}");
         }
     }
 }

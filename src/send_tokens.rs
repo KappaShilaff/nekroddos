@@ -163,7 +163,7 @@ async fn ddos_job(
         .client
         .get_contract_state(&from, None)
         .await?
-        .unwrap_or_else(|| panic!("No state for {}", from))
+        .unwrap_or_else(|| panic!("No state for {from}"))
         .account;
 
     for _ in 1..=test_env.num_iterations {

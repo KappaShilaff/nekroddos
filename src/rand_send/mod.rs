@@ -110,7 +110,7 @@ async fn spawn_ddos_jobs(
                 async move {
                     let state = match client.get_contract_state(addr, None).await {
                         Ok(Some(state)) => Arc::new(state.account),
-                        _ => panic!("Failed to get state for {}", addr),
+                        _ => panic!("Failed to get state for {addr}"),
                     };
 
                     (addr.clone(), state)
@@ -204,7 +204,7 @@ pub fn spawn_progress_printer(counter: Arc<AtomicU64>) -> JoinHandle<()> {
 fn save_accounts_to_file(accounts: &[MsgAddressInt], path: &Path) -> Result<()> {
     let mut file = std::fs::File::create(path)?;
     for account in accounts {
-        writeln!(file, "{}", account)?;
+        writeln!(file, "{account}")?;
     }
     Ok(())
 }

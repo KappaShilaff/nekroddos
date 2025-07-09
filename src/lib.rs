@@ -13,7 +13,7 @@ use url::Url;
 mod abi;
 mod app_cache;
 mod build_payload;
-mod latency;
+pub mod latency;
 mod models;
 mod send;
 
@@ -26,7 +26,7 @@ mod swap;
 mod util;
 
 #[derive(Parser, Debug, Clone)]
-struct Args {
+pub(crate) struct Args {
     #[command(subcommand)]
     command: Commands,
     #[clap(short, long)]

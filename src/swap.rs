@@ -92,7 +92,7 @@ pub async fn run(
 
     let start = std::time::Instant::now();
     let temp_client = client.clone();
-    let mut filtered_recipients = futures_util::stream::iter(recipients)
+    let filtered_recipients = futures_util::stream::iter(recipients)
         .map(move |addr| {
             let client = temp_client.clone();
             async move {

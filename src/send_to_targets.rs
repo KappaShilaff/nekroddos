@@ -177,7 +177,7 @@ async fn ddos_job(
         .client
         .get_contract_state(&from_wallet, None)
         .await?
-        .unwrap_or_else(|| panic!("No state for {}", from_wallet))
+        .unwrap_or_else(|| panic!("No state for {from_wallet}"))
         .account;
 
     for _ in 1..=test_env.num_iterations {

@@ -1,3 +1,6 @@
+pub mod plotting;
+pub mod combined_plot;
+
 use crate::models::GenericDeploymentInfo;
 use crate::{send, Args};
 use anyhow::{Context, Result};
@@ -7,7 +10,7 @@ use everscale_rpc_client::RpcClient;
 use governor::{Jitter, RateLimiter};
 use std::io::Write;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 #[derive(Parser, Debug, Clone)]
 pub struct LatencyTestArgs {
@@ -24,11 +27,22 @@ pub struct LatencyTestArgs {
     amount: u64,
 
     #[clap(short, long)]
-    /// Csv file to save results
     csv: Option<PathBuf>,
+
+    #[clap(long)]
+    /// Generate interactive HTML plot
+    plot: bool,
+    
+    #[clap(long)]
+    /// SLA threshold for marking violations
+    sla_threshold: Option<u64>,
+    
+    #[clap(long, default_value = "5")]
+    /// Time window for time series plots
+    time_window: u64,
 }
 
-pub async fn run(
+pub(crate) async fn run(
     latency_args: LatencyTestArgs,
     common_args: Args,
     keypair: &Keypair,
@@ -109,6 +123,7 @@ pub async fn run(
 
     let jitter = Jitter::new(Duration::from_millis(1), Duration::from_millis(50));
     let mut latencies = Vec::with_capacity(latency_args.num_txs);
+    let mut timestamped_latencies = Vec::with_capacity(latency_args.num_txs);
     let mut success_count = 0;
     let mut error_count = 0;
 
@@ -116,11 +131,13 @@ pub async fn run(
         rl.until_ready_with_jitter(jitter).await;
 
         let start = Instant::now();
+        let ts = SystemTime::now();
 
         match send_test_transaction(&client, keypair, &sender, &sender, latency_args.amount).await {
             Ok(_) => {
                 let latency = start.elapsed();
                 latencies.push(latency);
+                timestamped_latencies.push(plotting::TimestampedLatency { timestamp: ts, latency });
                 success_count += 1;
                 log::debug!("Transaction {} succeeded in {:?}", i, latency);
 
@@ -144,6 +161,8 @@ pub async fn run(
         let p50 = latencies[latencies.len() / 2];
         let p95 = latencies[(latencies.len() as f64 * 0.95) as usize];
         let p99 = latencies[(latencies.len() as f64 * 0.99) as usize];
+        let min = latencies[0];
+        let max = latencies[latencies.len() - 1];
 
         log::info!("Latency test results:");
         log::info!("Successful transactions: {}", success_count);
@@ -152,6 +171,34 @@ pub async fn run(
         log::info!("P50 latency: {:?}", p50);
         log::info!("P95 latency: {:?}", p95);
         log::info!("P99 latency: {:?}", p99);
+
+        if latency_args.plot {
+            let plot_path = if let Some(ref csv_path) = latency_args.csv {
+                csv_path.with_extension("html")
+            } else {
+                PathBuf::from("latency_combined.html")
+            };
+            
+            let stats = plotting::LatencyStats {
+                avg,
+                p50,
+                p95,
+                p99,
+                min,
+                max,
+            };
+            
+            plotting::generate_combined_plots(
+                &latencies,
+                &timestamped_latencies,
+                plot_path.clone(),
+                &stats,
+                latency_args.time_window,
+                latency_args.sla_threshold.map(|t| t as f64),
+            )?;
+            
+            log::info!("Plot saved to: {:?}", plot_path);
+        }
     }
 
     Ok(())
