@@ -30,6 +30,9 @@ chrono = "0.4.38"
 indexmap = "2.2.6"
 rand_distr = "0.4.3"
 charming = { version = "0.6.0" }
+histogram = "0.11.0"
+humantime = "2.1.0"
+hex = "0.4.3"
 
 [dev-dependencies]
 

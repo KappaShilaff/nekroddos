@@ -20,12 +20,13 @@ mod send;
 mod rand_send;
 
 mod dag;
-mod send_tokens;
+mod dos;
 mod send_to_targets;
+mod send_tokens;
 mod swap;
-mod util;
 #[cfg(test)]
 mod test_chart_series;
+mod util;
 
 #[derive(Parser, Debug, Clone)]
 pub(crate) struct Args {
@@ -63,6 +64,7 @@ enum Commands {
     Latency(latency::LatencyTestArgs),
     RandSend(rand_send::RandSendTestArgs),
     SendToTargets(send_to_targets::SendToTargetsArgs),
+    AccountsDos(dos::DosTestArgs),
 }
 
 pub async fn run_test() -> Result<()> {
@@ -109,6 +111,9 @@ pub async fn run_test() -> Result<()> {
         }
         Commands::SendToTargets(args) => {
             send_to_targets::run(args.clone(), app_args, keypair, client).await?;
+        }
+        Commands::AccountsDos(args) => {
+            dos::run(args.clone(), app_args, client).await?;
         }
     }
 

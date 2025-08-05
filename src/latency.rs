@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use ed25519_dalek::Keypair;
 use everscale_rpc_client::RpcClient;
-use governor::{Jitter, RateLimiter};
+use governor::RateLimiter;
 use std::io::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
